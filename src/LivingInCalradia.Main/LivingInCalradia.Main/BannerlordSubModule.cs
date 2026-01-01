@@ -12,6 +12,7 @@ using LivingInCalradia.Core.Application.Interfaces;
 using LivingInCalradia.Core.Application.Services;
 using LivingInCalradia.Infrastructure.Bannerlord;
 using LivingInCalradia.Main.Features;
+using LivingInCalradia.Main.Localization;
 
 namespace LivingInCalradia.Main;
 
@@ -30,6 +31,7 @@ public class BannerlordSubModule : MBSubModuleBase
     private BannerlordWorldSensor? _worldSensor;
     private BannerlordActionExecutor? _actionExecutor;
     private bool _isInitialized;
+    private string _effectiveLanguage = "en";
     
     // Tick timing control
     private float _lastTickTime;
@@ -46,17 +48,34 @@ public class BannerlordSubModule : MBSubModuleBase
         
         try
         {
-            Log("Mod yukleniyor...");
+            // Pre-load config to get language for early messages
+            try
+            {
+                var config = AIConfiguration.Load();
+                if (config.IsAuto)
+                {
+                    var gameLanguage = DetectGameLanguage();
+                    config.SetGameLanguage(gameLanguage);
+                }
+                _effectiveLanguage = config.EffectiveLanguage;
+                LocalizedStrings.SetLanguage(_effectiveLanguage);
+            }
+            catch
+            {
+                LocalizedStrings.SetLanguage("en");
+            }
+            
+            Log(LocalizedStrings.ModLoading);
             
             // Initialize Harmony for patching if needed
             _harmony = new Harmony(HarmonyId);
             // _harmony.PatchAll(); // Uncomment when patches are added
             
-            Log("Mod basariyla yuklendi!");
+            Log(LocalizedStrings.ModLoaded);
         }
         catch (Exception ex)
         {
-            LogError($"Mod yuklenirken hata: {ex.Message}");
+            LogError($"{LocalizedStrings.ModLoadError}: {ex.Message}");
         }
     }
     
@@ -70,11 +89,11 @@ public class BannerlordSubModule : MBSubModuleBase
         try
         {
             _harmony?.UnpatchAll(HarmonyId);
-            Log("Mod kaldirildi.");
+            Log(LocalizedStrings.ModUnloaded);
         }
         catch (Exception ex)
         {
-            LogError($"Mod kaldirilirken hata: {ex.Message}");
+            LogError($"{LocalizedStrings.ModUnloadError}: {ex.Message}");
         }
     }
     
@@ -89,10 +108,10 @@ public class BannerlordSubModule : MBSubModuleBase
         {
             var campaignStarter = (CampaignGameStarter)gameStarter;
             
-            // AI Dialogue behavior'i ekle
+            // AI Dialogue behavior
             campaignStarter.AddBehavior(new AIDialogueBehavior());
             
-            Log("Campaign baslatiliyor, AI sistemi ve Diyalog sistemi hazirlaniyor...");
+            Log(LocalizedStrings.CampaignStarting);
         }
     }
     
@@ -118,7 +137,7 @@ public class BannerlordSubModule : MBSubModuleBase
         
         _isInitialized = false;
         _workflowService = null;
-        Log("Oyun sona erdi, AI sistemi kapatildi.");
+        Log(LocalizedStrings.GameEnded);
     }
     
     /// <summary>
@@ -128,7 +147,6 @@ public class BannerlordSubModule : MBSubModuleBase
     {
         base.OnApplicationTick(dt);
         
-        // Hotkey kontrolu her zaman calissin (pause'da da test yapabilelim)
         _lastKeyCheckTime += dt;
         if (_lastKeyCheckTime >= KeyCheckIntervalSeconds)
         {
@@ -136,7 +154,6 @@ public class BannerlordSubModule : MBSubModuleBase
             CheckHotkeys();
         }
         
-        // Oyun duraklatilmissa AI calismasin
         if (IsGamePaused())
             return;
         
@@ -145,7 +162,6 @@ public class BannerlordSubModule : MBSubModuleBase
         
         _lastTickTime += dt;
         
-        // AI dusunme dongusu - belirli araliklarla calis
         if (_lastTickTime >= TickIntervalSeconds)
         {
             _lastTickTime = 0f;
@@ -163,18 +179,13 @@ public class BannerlordSubModule : MBSubModuleBase
             if (Campaign.Current == null)
                 return true;
             
-            // TimeControlMode.Stop = Oyun tamamen durduruldu (ESC veya Space)
             var mode = Campaign.Current.TimeControlMode;
             if (mode == CampaignTimeControlMode.Stop)
-            {
                 return true;
-            }
             
-            // Game.Current kontrolu
             if (Game.Current == null)
                 return true;
             
-            // GameStateManager kontrolu
             var gameStateManager = Game.Current.GameStateManager;
             if (gameStateManager == null)
                 return true;
@@ -183,7 +194,6 @@ public class BannerlordSubModule : MBSubModuleBase
             if (activeState == null)
                 return true;
             
-            // State tipini kontrol et
             var stateTypeName = activeState.GetType().Name;
             
             // SADECE MapState'de calis - diger tum state'lerde durdur
@@ -245,7 +255,7 @@ public class BannerlordSubModule : MBSubModuleBase
             // NumPad1 = Full Proof Test
             if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad1))
             {
-                Log("Full Proof Test baslatiliyor...");
+                Log(LocalizedStrings.FullProofTestStarting);
                 BannerlordActionExecutor.RunFullAIProofTest();
             }
             
@@ -258,7 +268,7 @@ public class BannerlordSubModule : MBSubModuleBase
             // NumPad3 = Hizli test
             if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad3))
             {
-                Log("Hizli Proof Test baslatiliyor...");
+                Log(LocalizedStrings.QuickTestStarting);
                 BannerlordActionExecutor.RunProofTest();
             }
             
@@ -270,7 +280,6 @@ public class BannerlordSubModule : MBSubModuleBase
         }
         catch
         {
-            // Input system might not be available
         }
     }
     
@@ -281,7 +290,7 @@ public class BannerlordSubModule : MBSubModuleBase
     {
         if (!_isInitialized || _workflowService == null)
         {
-            LogError("AI sistemi henuz hazir degil!");
+            LogError(LocalizedStrings.AISystemNotReady);
             return;
         }
         
@@ -304,7 +313,7 @@ public class BannerlordSubModule : MBSubModuleBase
             
             if (selectedLord == null)
             {
-                LogError("Dusunecek lord bulunamadi!");
+                LogError(LocalizedStrings.LordNotFound);
                 return;
             }
             
@@ -324,7 +333,7 @@ public class BannerlordSubModule : MBSubModuleBase
                     // Async islem bittikten sonra pause kontrolu
                     if (IsGamePaused())
                     {
-                        Log("Oyun duraklatildi, AI sonucu gosterilmeyecek.");
+                        Log(LocalizedStrings.GamePausedAIResultHidden);
                         return;
                     }
                     
@@ -356,18 +365,18 @@ public class BannerlordSubModule : MBSubModuleBase
                     }
                     else
                     {
-                        LogError($"Workflow basarisiz: {result.Error?.Message}");
+                        LogError($"{LocalizedStrings.WorkflowFailed}: {result.Error?.Message}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogError($"AI dusunme hatasi: {ex.Message}");
+                    LogError($"{LocalizedStrings.AIThinkingError}: {ex.Message}");
                 }
             });
         }
         catch (Exception ex)
         {
-            LogError($"TriggerSingleLordThinking hatasi: {ex.Message}");
+            LogError($"TriggerSingleLordThinking error: {ex.Message}");
         }
     }
     
@@ -378,7 +387,7 @@ public class BannerlordSubModule : MBSubModuleBase
     {
         try
         {
-            Log("AI sistemi baslatiliyor...");
+            Log(LocalizedStrings.AISystemStarting);
             
             // Load configuration
             var config = AIConfiguration.Load();
@@ -389,8 +398,11 @@ public class BannerlordSubModule : MBSubModuleBase
             {
                 var gameLanguage = DetectGameLanguage();
                 config.SetGameLanguage(gameLanguage);
-                Log($"Oyun dili algilandi: {gameLanguage} -> {config.EffectiveLanguage}");
+                Log(LocalizedStrings.LanguageDetected(gameLanguage, config.EffectiveLanguage));
             }
+            
+            _effectiveLanguage = config.EffectiveLanguage;
+            LocalizedStrings.SetLanguage(_effectiveLanguage);
             
             Log($"Provider: {config.Provider}, Model: {config.ModelId}, Language: {config.EffectiveLanguage}");
             
@@ -398,14 +410,14 @@ public class BannerlordSubModule : MBSubModuleBase
             if (config.IsGroq)
             {
                 _orchestrator = new GroqOrchestrator(config.ApiKey, config.ModelId, config.Temperature, config.EffectiveLanguage);
-                Log("GroqOrchestrator kullaniliyor (direct API)");
+                Log("GroqOrchestrator (direct API)");
             }
             else
             {
                 var kernelFactory = new KernelFactory()
                     .WithOpenAI(config.ApiKey, config.ModelId, config.OrganizationId);
                 _orchestrator = kernelFactory.BuildOrchestrator();
-                Log("SemanticKernelOrchestrator kullaniliyor");
+                Log("SemanticKernelOrchestrator");
             }
             
             // Create Bannerlord-specific implementations
@@ -419,20 +431,20 @@ public class BannerlordSubModule : MBSubModuleBase
                 _actionExecutor);
             
             _isInitialized = true;
-            Log("AI sistemi basariyla baslatildi!");
+            Log(LocalizedStrings.AISystemStarted);
             Log("Hotkeys: NumPad1=FullTest, NumPad2=AI, NumPad3=QuickTest, NumPad5=Thoughts");
             
             // Display in-game message
             var langText = config.IsTurkish ? "Turkce" : "English";
             InformationManager.DisplayMessage(new InformationMessage(
-                $"Living in Calradia AI aktif! ({langText}) NumPad1-5 ile test edin.",
+                LocalizedStrings.ModActiveMessage(langText),
                 Colors.Green));
         }
         catch (Exception ex)
         {
-            LogError($"AI sistemi baslatilamadi: {ex.Message}");
+            LogError($"{LocalizedStrings.AISystemError}: {ex.Message}");
             InformationManager.DisplayMessage(new InformationMessage(
-                $"LivingInCalradia HATA: {ex.Message}",
+                $"LivingInCalradia {LocalizedStrings.Error}: {ex.Message}",
                 Colors.Red));
         }
     }
@@ -442,26 +454,16 @@ public class BannerlordSubModule : MBSubModuleBase
     /// </summary>
     private string DetectGameLanguage()
     {
-        // Method 1: Try TaleWorlds.Localization.MBTextManager
         try
         {
-            // MBTextManager stores the active language ID
             var activeTextLanguage = MBTextManager.ActiveTextLanguage;
             if (!string.IsNullOrEmpty(activeTextLanguage))
-            {
-                Log($"MBTextManager.ActiveTextLanguage: {activeTextLanguage}");
                 return activeTextLanguage;
-            }
         }
-        catch (Exception ex)
-        {
-            Debug.Print($"[LivingInCalradia] MBTextManager error: {ex.Message}");
-        }
+        catch { }
         
-        // Method 2: Try to read from game texts as a heuristic
         try
         {
-            // Check a known localized string to detect language
             var testText = GameTexts.FindText("str_menu_return_to_campaign_map")?.ToString() ?? "";
             
             if (testText.Contains("Kampanya") || testText.Contains("harita"))
@@ -470,49 +472,19 @@ public class BannerlordSubModule : MBSubModuleBase
                 return "German";
             if (testText.Contains("carte") || testText.Contains("campagne"))
                 return "French";
-            if (testText.Contains("mapa") || testText.Contains("campaña"))
+            if (testText.Contains("mapa"))
                 return "Spanish";
         }
-        catch (Exception ex)
-        {
-            Debug.Print($"[LivingInCalradia] GameTexts heuristic error: {ex.Message}");
-        }
+        catch { }
         
-        // Method 3: Fallback to system culture
         try
         {
             var culture = System.Globalization.CultureInfo.CurrentUICulture;
-            Log($"System culture fallback: {culture.Name}");
-            
             if (culture.Name.StartsWith("tr", StringComparison.OrdinalIgnoreCase))
                 return "Turkish";
-            if (culture.Name.StartsWith("de", StringComparison.OrdinalIgnoreCase))
-                return "German";
-            if (culture.Name.StartsWith("fr", StringComparison.OrdinalIgnoreCase))
-                return "French";
-            if (culture.Name.StartsWith("es", StringComparison.OrdinalIgnoreCase))
-                return "Spanish";
-            if (culture.Name.StartsWith("ru", StringComparison.OrdinalIgnoreCase))
-                return "Russian";
-            if (culture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase))
-                return "Chinese";
-            if (culture.Name.StartsWith("ja", StringComparison.OrdinalIgnoreCase))
-                return "Japanese";
-            if (culture.Name.StartsWith("ko", StringComparison.OrdinalIgnoreCase))
-                return "Korean";
-            if (culture.Name.StartsWith("pl", StringComparison.OrdinalIgnoreCase))
-                return "Polish";
-            if (culture.Name.StartsWith("pt", StringComparison.OrdinalIgnoreCase))
-                return "Portuguese";
-            if (culture.Name.StartsWith("it", StringComparison.OrdinalIgnoreCase))
-                return "Italian";
         }
-        catch (Exception ex)
-        {
-            Debug.Print($"[LivingInCalradia] Culture detection error: {ex.Message}");
-        }
+        catch { }
         
-        // Default to English
         return "English";
     }
     
@@ -524,10 +496,9 @@ public class BannerlordSubModule : MBSubModuleBase
         if (_workflowService == null || Campaign.Current == null)
             return;
         
-        // Baslamadan once kontrol
         if (IsGamePaused())
         {
-            Log("Oyun duraklatildi, AI islemi iptal edildi.");
+            Log(LocalizedStrings.GamePausedAICancelled);
             return;
         }
         
@@ -544,7 +515,7 @@ public class BannerlordSubModule : MBSubModuleBase
                 // Her hero islemeden once pause kontrolu
                 if (IsGamePaused())
                 {
-                    Log("Oyun duraklatildi, AI dongusu durduruluyor.");
+                    Log(LocalizedStrings.GamePausedLoopStopped);
                     return;
                 }
                 
@@ -554,14 +525,14 @@ public class BannerlordSubModule : MBSubModuleBase
                 var agentId = GetAgentId(hero);
                 var heroInfo = GetHeroDisplayInfo(hero);
                 
-                Log($"{heroInfo} dusunuyor...");
+                Log(LocalizedStrings.LordThinking(heroInfo));
                 
                 var result = await _workflowService.ExecuteWorkflowAsync(agentId);
                 
                 // Async islem sonrasi tekrar kontrol
                 if (IsGamePaused())
                 {
-                    Log("Oyun duraklatildi, sonuc uygulanmayacak.");
+                    Log(LocalizedStrings.GamePausedResultNotShown);
                     return;
                 }
                 
@@ -596,12 +567,12 @@ public class BannerlordSubModule : MBSubModuleBase
                     }
                     else
                     {
-                        Log($"{heroInfo} beklemeye karar verdi");
+                        Log(LocalizedStrings.LordDecidedToWait(heroInfo));
                     }
                 }
                 else
                 {
-                    LogError($"{heroInfo} icin workflow basarisiz: {result.Error?.Message}");
+                    LogError($"{heroInfo}: {LocalizedStrings.WorkflowFailed}: {result.Error?.Message}");
                 }
                 
                 await Task.Delay(500);
@@ -609,7 +580,7 @@ public class BannerlordSubModule : MBSubModuleBase
         }
         catch (Exception ex)
         {
-            LogError($"AI isleme hatasi: {ex.Message}");
+            LogError($"{LocalizedStrings.AIProcessingError}: {ex.Message}");
         }
     }
     
@@ -622,8 +593,9 @@ public class BannerlordSubModule : MBSubModuleBase
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
+            // Support both Turkish and English
             if (trimmed.StartsWith("DUSUNCE:", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.StartsWith("DUSUNCE:", StringComparison.OrdinalIgnoreCase))
+                trimmed.StartsWith("THOUGHT:", StringComparison.OrdinalIgnoreCase))
             {
                 var thought = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
                 if (thought.Length > 150)
@@ -643,11 +615,11 @@ public class BannerlordSubModule : MBSubModuleBase
         var sb = new System.Text.StringBuilder();
         
         if (hero.IsFactionLeader)
-            sb.Append("Kral ");
+            sb.Append(LocalizedStrings.King);
         else if (hero.IsLord)
-            sb.Append("Lord ");
+            sb.Append(LocalizedStrings.Lord);
         else if (hero.IsNotable)
-            sb.Append("Notable ");
+            sb.Append(LocalizedStrings.Notable);
         
         sb.Append(hero.Name);
         
@@ -731,7 +703,7 @@ public class BannerlordSubModule : MBSubModuleBase
     private static void LogError(string message)
     {
         InformationManager.DisplayMessage(new InformationMessage(
-            $"{ModName} HATA: {message}",
+            $"{ModName} {LocalizedStrings.Error}: {message}",
             Colors.Red));
         
         Debug.Print($"{ModName} ERROR: {message}");
