@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="2.6.122" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\LivingInCalradia.Core\LivingInCalradia.Core\LivingInCalradia.Core.csproj" />
+  </ItemGroup>
+</Project>

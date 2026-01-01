@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <OutputPath>..\..\..\..\modules\LivingInCalradia\bin\Win64_Shipping_Client</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Lib.Harmony" Version="2.2.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\LivingInCalradia.Core\LivingInCalradia.Core\LivingInCalradia.Core.csproj" />
+    <ProjectReference Include="..\..\LivingInCalradia.AI\LivingInCalradia.AI\LivingInCalradia.AI.csproj" />
+    <ProjectReference Include="..\..\LivingInCalradia.Infrastructure\LivingInCalradia.Infrastructure\LivingInCalradia.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="ai-config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>
