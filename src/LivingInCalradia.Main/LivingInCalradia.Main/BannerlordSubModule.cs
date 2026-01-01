@@ -403,7 +403,10 @@ public class BannerlordSubModule : MBSubModuleBase
             
             _effectiveLanguage = config.EffectiveLanguage;
             LocalizedStrings.SetLanguage(_effectiveLanguage);
+<<<<<<< HEAD
             BannerlordActionExecutor.SetLanguage(_effectiveLanguage);
+=======
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
             
             Log($"Provider: {config.Provider}, Model: {config.ModelId}, Language: {config.EffectiveLanguage}");
             

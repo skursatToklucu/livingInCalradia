@@ -12,12 +12,15 @@ public sealed class ConversationMemory
 {
     private readonly Dictionary<string, List<ConversationEntry>> _conversations;
     private readonly int _maxEntriesPerNpc;
+<<<<<<< HEAD
     private static bool _isTurkish = false;
     
     public static void SetLanguage(string language)
     {
         _isTurkish = language?.ToLowerInvariant() == "tr";
     }
+=======
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
     
     public ConversationMemory(int maxEntriesPerNpc = 10)
     {
@@ -58,6 +61,7 @@ public sealed class ConversationMemory
     {
         if (!_conversations.TryGetValue(npcId, out var entries) || entries.Count == 0)
         {
+<<<<<<< HEAD
             return _isTurkish 
                 ? "Bu oyuncu ile ilk konusmaniz."
                 : "This is your first conversation with this player.";
@@ -69,6 +73,13 @@ public sealed class ConversationMemory
         
         var playerLabel = _isTurkish ? "Oyuncu" : "Player";
         var youLabel = _isTurkish ? "Sen" : "You";
+=======
+            return "Bu oyuncu ile ilk konusmaniz.";
+        }
+        
+        var sb = new StringBuilder();
+        sb.AppendLine($"Son {entries.Count} konusmaniz:");
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
         
         foreach (var entry in entries)
         {
@@ -76,8 +87,13 @@ public sealed class ConversationMemory
             var timeStr = FormatTimeAgo(timeAgo);
             
             sb.AppendLine($"  [{timeStr}]");
+<<<<<<< HEAD
             sb.AppendLine($"    {playerLabel}: {TruncateText(entry.PlayerMessage, 100)}");
             sb.AppendLine($"    {youLabel}: {TruncateText(entry.NpcResponse, 100)}");
+=======
+            sb.AppendLine($"    Oyuncu: {TruncateText(entry.PlayerMessage, 100)}");
+            sb.AppendLine($"    Sen: {TruncateText(entry.NpcResponse, 100)}");
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
         }
         
         return sb.ToString();
@@ -89,7 +105,13 @@ public sealed class ConversationMemory
     public string? GetLastPlayerMessage(string npcId)
     {
         if (!_conversations.TryGetValue(npcId, out var entries) || entries.Count == 0)
+<<<<<<< HEAD
             return null;
+=======
+        {
+            return null;
+        }
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
         
         return entries[entries.Count - 1].PlayerMessage;
     }
@@ -112,6 +134,7 @@ public sealed class ConversationMemory
     
     private string FormatTimeAgo(TimeSpan timeAgo)
     {
+<<<<<<< HEAD
         if (_isTurkish)
         {
             if (timeAgo.TotalMinutes < 1) return "az once";
@@ -126,6 +149,12 @@ public sealed class ConversationMemory
             if (timeAgo.TotalHours < 24) return $"{(int)timeAgo.TotalHours} hours ago";
             return $"{(int)timeAgo.TotalDays} days ago";
         }
+=======
+        if (timeAgo.TotalMinutes < 1) return "az once";
+        if (timeAgo.TotalMinutes < 60) return $"{(int)timeAgo.TotalMinutes} dakika once";
+        if (timeAgo.TotalHours < 24) return $"{(int)timeAgo.TotalHours} saat once";
+        return $"{(int)timeAgo.TotalDays} gun once";
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
     }
     
     private string TruncateText(string text, int maxLength)

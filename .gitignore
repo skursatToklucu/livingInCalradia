@@ -54,6 +54,10 @@ secrets.json
 # Bannerlord modules output
 modules/
 
+# Workshop files
+WorkshopCreate.xml
+WorkshopUpdate.xml
+
 # Test results
 TestResults/
 *.trx

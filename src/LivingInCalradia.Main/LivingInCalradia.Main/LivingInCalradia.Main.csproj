@@ -3,20 +3,110 @@
     <TargetFramework>net472</TargetFramework>
     <LangVersion>10.0</LangVersion>
     <Nullable>enable</Nullable>
-    <OutputType>Exe</OutputType>
-    <OutputPath>..\..\..\..\modules\LivingInCalradia\bin\Win64_Shipping_Client</OutputPath>
+    <OutputType>Library</OutputType>
+    <AssemblyName>LivingInCalradia.Main</AssemblyName>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
+
+  <!-- Bannerlord Game Path - Adjust if needed -->
+  <PropertyGroup>
+    <GameFolder>C:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord</GameFolder>
+    <GameBinFolder>$(GameFolder)\bin\Win64_Shipping_wEditor</GameBinFolder>
+  </PropertyGroup>
+
+  <!-- Output to project's bin folder -->
+  <PropertyGroup>
+    <OutputPath>bin\$(Configuration)\net472</OutputPath>
+  </PropertyGroup>
+  
+  <!-- Module output paths -->
+  <PropertyGroup>
+    <SolutionDir>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'LivingInCalradia.sln'))</SolutionDir>
+    <ProjectModulePath>$(SolutionDir)\modules\LivingInCalradia\bin\Win64_Shipping_Client</ProjectModulePath>
+    <GameModulePath>$(GameFolder)\Modules\LivingInCalradia\bin\Win64_Shipping_Client</GameModulePath>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.2.2" />
   </ItemGroup>
+
+  <!-- TaleWorlds References -->
+  <ItemGroup>
+    <Reference Include="TaleWorlds.Core">
+      <HintPath>$(GameBinFolder)\TaleWorlds.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.Library">
+      <HintPath>$(GameBinFolder)\TaleWorlds.Library.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.Engine">
+      <HintPath>$(GameBinFolder)\TaleWorlds.Engine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.MountAndBlade">
+      <HintPath>$(GameBinFolder)\TaleWorlds.MountAndBlade.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.CampaignSystem">
+      <HintPath>$(GameBinFolder)\TaleWorlds.CampaignSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.Localization">
+      <HintPath>$(GameBinFolder)\TaleWorlds.Localization.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.ObjectSystem">
+      <HintPath>$(GameBinFolder)\TaleWorlds.ObjectSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.SaveSystem">
+      <HintPath>$(GameBinFolder)\TaleWorlds.SaveSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.InputSystem">
+      <HintPath>$(GameBinFolder)\TaleWorlds.InputSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\LivingInCalradia.Core\LivingInCalradia.Core\LivingInCalradia.Core.csproj" />
     <ProjectReference Include="..\..\LivingInCalradia.AI\LivingInCalradia.AI\LivingInCalradia.AI.csproj" />
     <ProjectReference Include="..\..\LivingInCalradia.Infrastructure\LivingInCalradia.Infrastructure\LivingInCalradia.Infrastructure.csproj" />
   </ItemGroup>
+
   <ItemGroup>
     <None Update="ai-config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  
+  <!-- Post-build: Copy to project's modules folder -->
+  <Target Name="CopyToProjectModules" AfterTargets="Build">
+    <MakeDir Directories="$(ProjectModulePath)" Condition="!Exists('$(ProjectModulePath)')" />
+    <ItemGroup>
+      <DllFiles Include="$(OutputPath)\*.dll" />
+      <ConfigFiles Include="$(OutputPath)\ai-config.json" Condition="Exists('$(OutputPath)\ai-config.json')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DllFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ConfigFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" />
+    <Message Text="[LivingInCalradia] Copied to: $(ProjectModulePath)" Importance="high" />
+  </Target>
+  
+  <!-- Post-build: Copy to game folder (if exists) -->
+  <Target Name="CopyToGameModules" AfterTargets="CopyToProjectModules" Condition="Exists('$(GameFolder)')">
+    <MakeDir Directories="$(GameModulePath)" Condition="!Exists('$(GameModulePath)')" />
+    <MakeDir Directories="$(GameFolder)\Modules\LivingInCalradia" Condition="!Exists('$(GameFolder)\Modules\LivingInCalradia')" />
+    
+    <!-- Copy DLLs and config -->
+    <ItemGroup>
+      <ModuleFiles Include="$(ProjectModulePath)\*.*" />
+      <SubModuleXml Include="$(SolutionDir)\modules\LivingInCalradia\SubModule.xml" Condition="Exists('$(SolutionDir)\modules\LivingInCalradia\SubModule.xml')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ModuleFiles)" DestinationFolder="$(GameModulePath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(SubModuleXml)" DestinationFolder="$(GameFolder)\Modules\LivingInCalradia" SkipUnchangedFiles="true" />
+    <Message Text="[LivingInCalradia] Deployed to game: $(GameModulePath)" Importance="high" />
+  </Target>
 </Project>

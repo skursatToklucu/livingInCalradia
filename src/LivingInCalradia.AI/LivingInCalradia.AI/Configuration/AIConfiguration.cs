@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using System.Text.Json;
+using System.Reflection;
 
 namespace LivingInCalradia.AI.Configuration;
 
@@ -11,11 +11,19 @@ namespace LivingInCalradia.AI.Configuration;
 public sealed class AIConfiguration
 {
     public string ApiKey { get; set; } = string.Empty;
-    public string ModelId { get; set; } = "llama-3.1-70b-versatile";
-    public string Provider { get; set; } = "Groq"; // "OpenAI" or "Groq"
+    public string ModelId { get; set; } = "llama-3.1-8b-instant";
+    public string Provider { get; set; } = "Groq";
     public string? OrganizationId { get; set; }
     public double Temperature { get; set; } = 0.7;
     public int MaxTokens { get; set; } = 500;
+    
+    /// <summary>
+    /// Language for AI responses. Options: "auto" (detect from game), "tr" (Turkish), "en" (English)
+    /// </summary>
+    public string Language { get; set; } = "auto";
+    
+    // Runtime resolved language (after auto-detection)
+    private string? _resolvedLanguage;
     
     // Backward compatibility
     public string OpenAIApiKey 
@@ -25,67 +33,217 @@ public sealed class AIConfiguration
     }
     
     /// <summary>
+    /// Gets the effective language (resolves "auto" to actual language).
+    /// Call SetGameLanguage() first if using "auto".
+    /// </summary>
+    public string EffectiveLanguage => _resolvedLanguage ?? (IsAuto ? "en" : Language);
+    
+    /// <summary>
+    /// Check if language is set to auto-detect.
+    /// </summary>
+    public bool IsAuto => Language?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
+    
+    /// <summary>
+    /// Check if using Turkish language.
+    /// </summary>
+    public bool IsTurkish => EffectiveLanguage.Equals("tr", StringComparison.OrdinalIgnoreCase);
+    
+    /// <summary>
+    /// Check if using English language.
+    /// </summary>
+    public bool IsEnglish => EffectiveLanguage.Equals("en", StringComparison.OrdinalIgnoreCase);
+    
+    /// <summary>
+    /// Sets the resolved language from game detection.
+    /// </summary>
+    public void SetGameLanguage(string gameLanguage)
+    {
+        if (IsAuto && !string.IsNullOrWhiteSpace(gameLanguage))
+        {
+            _resolvedLanguage = MapGameLanguage(gameLanguage);
+        }
+    }
+    
+    /// <summary>
+    /// Maps game language code to our supported languages.
+    /// </summary>
+    private string MapGameLanguage(string gameLanguage)
+    {
+        var lang = gameLanguage.ToLowerInvariant();
+        
+        // Turkish variants
+        if (lang.Contains("turkish") || lang.Contains("türkçe") || lang == "tr" || lang == "tr-tr")
+            return "tr";
+        
+        // English variants (default fallback)
+        if (lang.Contains("english") || lang == "en" || lang == "en-us" || lang == "en-gb")
+            return "en";
+        
+        // German
+        if (lang.Contains("german") || lang.Contains("deutsch") || lang == "de")
+            return "en"; // Fallback to English for now
+        
+        // French
+        if (lang.Contains("french") || lang.Contains("français") || lang == "fr")
+            return "en"; // Fallback to English for now
+        
+        // Spanish
+        if (lang.Contains("spanish") || lang.Contains("español") || lang == "es")
+            return "en"; // Fallback to English for now
+        
+        // Default to English
+        return "en";
+    }
+
+    /// <summary>
     /// Loads configuration from a JSON file.
-    /// Falls back to environment variables if file doesn't exist.
     /// </summary>
     public static AIConfiguration Load(string configPath = "ai-config.json")
     {
-        // Try multiple paths
+        // Get the directory where the DLL is located
+        var assemblyLocation = Assembly.GetExecutingAssembly().Location;
+        var assemblyDir = Path.GetDirectoryName(assemblyLocation) ?? "";
+        
+        Console.WriteLine($"[Config] Assembly dir: {assemblyDir}");
+        
+        // Try multiple paths including Bannerlord module paths
         var paths = new[]
         {
+            // Same directory as DLL (Bannerlord module bin folder)
+            Path.Combine(assemblyDir, configPath),
+            // Parent directories (module root)
+            Path.Combine(assemblyDir, "..", configPath),
+            Path.Combine(assemblyDir, "..", "..", configPath),
+            // Standard paths
             configPath,
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, configPath),
-            Path.Combine(Environment.CurrentDirectory, configPath)
+            Path.Combine(Environment.CurrentDirectory, configPath),
+            // Bannerlord specific paths
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Modules", "LivingInCalradia", "bin", "Win64_Shipping_Client", configPath),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Modules", "LivingInCalradia", configPath),
         };
         
         foreach (var path in paths)
         {
             try
             {
-                if (File.Exists(path))
+                var fullPath = Path.GetFullPath(path);
+                Console.WriteLine($"[Config] Trying: {fullPath}");
+                
+                if (File.Exists(fullPath))
                 {
-                    Console.WriteLine($"[Config] Found config at: {path}");
-                    var json = File.ReadAllText(path);
+                    Console.WriteLine($"[Config] Found config at: {fullPath}");
+                    var json = File.ReadAllText(fullPath);
                     
-                    var options = new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    };
+                    // Parse JSON manually (avoid System.Text.Json issues with .NET 4.7.2)
+                    var config = ParseConfigJson(json);
                     
-                    var config = JsonSerializer.Deserialize<AIConfiguration>(json, options);
                     if (config != null && !string.IsNullOrWhiteSpace(config.ApiKey))
                     {
-                        Console.WriteLine($"[Config] Loaded successfully. Provider: {config.Provider}");
+                        Console.WriteLine($"[Config] Loaded successfully. Provider: {config.Provider}, Language: {config.Language}");
                         return config;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Config] Warning: Could not load from {path}: {ex.Message}");
+                Console.WriteLine($"[Config] Warning: {path}: {ex.Message}");
             }
         }
         
-        Console.WriteLine("[Config] No config file found, checking environment variables...");
-        Console.WriteLine($"[Config] Current directory: {Environment.CurrentDirectory}");
-        Console.WriteLine($"[Config] Base directory: {AppDomain.CurrentDomain.BaseDirectory}");
+        Console.WriteLine("[Config] ERROR: No config file found!");
         
-        // Fallback to environment variables
-        var envApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY") 
-                     ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
-                     ?? string.Empty;
+        // Return empty config - will fail validation
+        return new AIConfiguration();
+    }
+    
+    /// <summary>
+    /// Parse JSON config manually to avoid System.Text.Json issues
+    /// </summary>
+    private static AIConfiguration ParseConfigJson(string json)
+    {
+        var config = new AIConfiguration();
         
-        var provider = Environment.GetEnvironmentVariable("GROQ_API_KEY") != null ? "Groq" : "OpenAI";
-        
-        return new AIConfiguration
+        try
         {
-            ApiKey = envApiKey,
-            Provider = provider,
-            ModelId = provider == "Groq" 
-                ? "llama-3.1-70b-versatile" 
-                : Environment.GetEnvironmentVariable("OPENAI_MODEL_ID") ?? "gpt-4",
-            OrganizationId = Environment.GetEnvironmentVariable("OPENAI_ORG_ID")
-        };
+            // Simple JSON parsing
+            config.ApiKey = ExtractJsonValue(json, "ApiKey") ?? "";
+            config.Provider = ExtractJsonValue(json, "Provider") ?? "Groq";
+            config.ModelId = ExtractJsonValue(json, "ModelId") ?? "llama-3.1-8b-instant";
+            config.OrganizationId = ExtractJsonValue(json, "OrganizationId");
+            config.Language = ExtractJsonValue(json, "Language") ?? "auto";
+            
+            var tempStr = ExtractJsonValue(json, "Temperature");
+            if (double.TryParse(tempStr, System.Globalization.NumberStyles.Any, 
+                System.Globalization.CultureInfo.InvariantCulture, out var temp))
+            {
+                config.Temperature = temp;
+            }
+            
+            var maxTokensStr = ExtractJsonValue(json, "MaxTokens");
+            if (int.TryParse(maxTokensStr, out var maxTokens))
+            {
+                config.MaxTokens = maxTokens;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Config] Parse error: {ex.Message}");
+        }
+        
+        return config;
+    }
+    
+    /// <summary>
+    /// Extract a value from JSON by key name
+    /// </summary>
+    private static string? ExtractJsonValue(string json, string key)
+    {
+        // Find "key": "value" or "key": value
+        var searchKey = $"\"{key}\"";
+        var keyIndex = json.IndexOf(searchKey, StringComparison.OrdinalIgnoreCase);
+        
+        if (keyIndex == -1)
+            return null;
+        
+        // Find the colon after the key
+        var colonIndex = json.IndexOf(':', keyIndex + searchKey.Length);
+        if (colonIndex == -1)
+            return null;
+        
+        // Skip whitespace
+        var valueStart = colonIndex + 1;
+        while (valueStart < json.Length && char.IsWhiteSpace(json[valueStart]))
+            valueStart++;
+        
+        if (valueStart >= json.Length)
+            return null;
+        
+        // Check if value is quoted string
+        if (json[valueStart] == '"')
+        {
+            valueStart++; // Skip opening quote
+            var valueEnd = valueStart;
+            
+            // Find closing quote (handle escaped quotes)
+            while (valueEnd < json.Length)
+            {
+                if (json[valueEnd] == '"' && (valueEnd == 0 || json[valueEnd - 1] != '\\'))
+                    break;
+                valueEnd++;
+            }
+            
+            return json.Substring(valueStart, valueEnd - valueStart);
+        }
+        else
+        {
+            // Unquoted value (number, boolean, null)
+            var valueEnd = valueStart;
+            while (valueEnd < json.Length && json[valueEnd] != ',' && json[valueEnd] != '}' && !char.IsWhiteSpace(json[valueEnd]))
+                valueEnd++;
+            
+            return json.Substring(valueStart, valueEnd - valueStart);
+        }
     }
     
     /// <summary>
@@ -96,7 +254,7 @@ public sealed class AIConfiguration
         if (string.IsNullOrWhiteSpace(ApiKey))
         {
             throw new InvalidOperationException(
-                "API Key is required. Set it in ai-config.json or GROQ_API_KEY/OPENAI_API_KEY environment variable.");
+                "API Key is required. Set it in ai-config.json file in the mod's bin folder.");
         }
     }
     

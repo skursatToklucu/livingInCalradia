@@ -57,13 +57,17 @@ public sealed class AgentMemory
     {
         if (!_memories.TryGetValue(agentId, out var memories) || memories.Count == 0)
         {
+<<<<<<< HEAD
 <<<<<<< Updated upstream
             return "Önceki kararlar?n yok - bu senin ilk karar?n.";
+=======
+            return "Onceki kararlarin yok - bu senin ilk kararin.";
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
         }
         
         var lines = new List<string>
         {
-            $"Son {memories.Count} karar?n:"
+            $"Son {memories.Count} kararin:"
         };
 =======
             return _isTurkish 
@@ -79,6 +83,7 @@ public sealed class AgentMemory
         {
             var m = memories[i];
             var timeAgo = DateTime.UtcNow - m.Timestamp;
+<<<<<<< HEAD
 <<<<<<< Updated upstream
             var timeStr = timeAgo.TotalMinutes < 1 ? "az önce" : $"{timeAgo.TotalMinutes:F0} dakika önce";
 =======
@@ -93,6 +98,9 @@ public sealed class AgentMemory
                 timeStr = timeAgo.TotalMinutes < 1 ? "just now" : $"{timeAgo.TotalMinutes:F0} minutes ago";
             }
 >>>>>>> Stashed changes
+=======
+            var timeStr = timeAgo.TotalMinutes < 1 ? "az once" : $"{timeAgo.TotalMinutes:F0} dakika once";
+>>>>>>> 7bbf43fa65d416561c574b3f55c38a156e5f6049
             
             lines.Add($"  {i + 1}. [{timeStr}] {m.Action}: {TruncateText(m.Decision, 80)}");
         }
