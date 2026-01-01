@@ -85,7 +85,12 @@ public class BannerlordSubModule : MBSubModuleBase
         
         if (game.GameType is Campaign)
         {
-            Log("Campaign ba?lat?l?yor, AI sistemi haz?rlan?yor...");
+            var campaignStarter = (CampaignGameStarter)gameStarter;
+            
+            // AI Dialogue behavior'? ekle
+            campaignStarter.AddBehavior(new AIDialogueBehavior());
+            
+            Log("Campaign ba?lat?l?yor, AI sistemi ve Diyalog sistemi haz?rlan?yor...");
         }
     }
     
