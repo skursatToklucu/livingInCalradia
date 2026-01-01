@@ -20,8 +20,13 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     private readonly string _model;
     private readonly double _temperature;
     private readonly AgentMemory _memory;
+    private readonly string _language;
     
-    public GroqOrchestrator(string apiKey, string model = "llama-3.1-8b-instant", double temperature = 0.7)
+    public GroqOrchestrator(
+        string apiKey, 
+        string model = "llama-3.1-8b-instant", 
+        double temperature = 0.7,
+        string language = "tr")
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentNullException(nameof(apiKey));
@@ -29,6 +34,7 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         _model = model;
         _temperature = temperature;
         _memory = new AgentMemory(maxMemoriesPerAgent: 5);
+        _language = language;
         
         _httpClient = new HttpClient
         {
@@ -67,7 +73,13 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         // Parse response manually
         var messageContent = ExtractContentFromResponse(responseJson);
         
-        Console.WriteLine($"\n[AI YANITI]\n{messageContent}\n");
+        // Sanitize Turkish characters if using Turkish
+        if (_language == "tr")
+        {
+            messageContent = SanitizeTurkishText(messageContent);
+        }
+        
+        Console.WriteLine($"\n[AI RESPONSE]\n{messageContent}\n");
         
         // Parse action from response
         var actions = ParseActions(messageContent);
@@ -79,6 +91,29 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         _memory.Remember(agentId, perception.Location, shortDecision, actionName);
         
         return decision;
+    }
+    
+    /// <summary>
+    /// Converts Turkish special characters to ASCII equivalents for Bannerlord font compatibility.
+    /// </summary>
+    private string SanitizeTurkishText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+        
+        return text
+            .Replace('?', 'i')
+            .Replace('?', 'I')
+            .Replace('?', 's')
+            .Replace('?', 'S')
+            .Replace('?', 'g')
+            .Replace('?', 'G')
+            .Replace('ü', 'u')
+            .Replace('Ü', 'U')
+            .Replace('ö', 'o')
+            .Replace('Ö', 'O')
+            .Replace('ç', 'c')
+            .Replace('Ç', 'C');
     }
     
     private string BuildRequestJson(string systemPrompt, string userPrompt)
@@ -150,18 +185,20 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     
     private string ExtractShortDecision(string fullResponse)
     {
-        // Extract just the DUSUNCE part for memory
+        // Extract the THOUGHT part for memory
+        var thoughtKey = _language == "tr" ? "DUSUNCE:" : "THOUGHT:";
         var lines = fullResponse.Split('\n');
         foreach (var line in lines)
         {
-            if (line.Trim().StartsWith("DUSUNCE:", StringComparison.OrdinalIgnoreCase) ||
-                line.Trim().StartsWith("DÜ?ÜNCE:", StringComparison.OrdinalIgnoreCase))
+            if (line.Trim().StartsWith(thoughtKey, StringComparison.OrdinalIgnoreCase))
             {
                 return line.Substring(line.IndexOf(':') + 1).Trim();
             }
         }
         
-        // Fallback: return full response without truncation
+        // Fallback: return first 100 chars
+        if (fullResponse.Length > 100)
+            return fullResponse.Substring(0, 100) + "...";
         return fullResponse;
     }
     
@@ -169,6 +206,16 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     {
         var agentLower = agentId.ToLowerInvariant();
         
+        if (_language == "en")
+        {
+            return GetEnglishPersonalityPrompt(agentLower);
+        }
+        
+        return GetTurkishPersonalityPrompt(agentLower);
+    }
+    
+    private string GetTurkishPersonalityPrompt(string agentLower)
+    {
         var basePrompt = "";
         
         if (agentLower.Contains("king") || agentLower.Contains("caladog"))
@@ -192,10 +239,48 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
             basePrompt = "Sen Mount & Blade II: Bannerlord dunyasinda yasayan bir karaktersin. Mantik yuruterek kararlar ver.";
         }
         
-        return basePrompt + " Onceki kararlarini goz onunde bulundur. Tutarli ol.";
+        return basePrompt + " Onceki kararlarini goz onunde bulundur. Tutarli ol. ONEMLI: Turkce ozel karakterler KULLANMA (i, s, g, u, o, c kullan).";
+    }
+    
+    private string GetEnglishPersonalityPrompt(string agentLower)
+    {
+        var basePrompt = "";
+        
+        if (agentLower.Contains("king") || agentLower.Contains("caladog"))
+        {
+            basePrompt = "You are King Caladog of Battania. You are a powerful, honorable warrior king. Your decisions should benefit your people and expand your kingdom.";
+        }
+        else if (agentLower.Contains("merchant") || agentLower.Contains("trader"))
+        {
+            basePrompt = "You are a wealthy merchant. Making money and expanding your trade network is your top priority.";
+        }
+        else if (agentLower.Contains("commander") || agentLower.Contains("general"))
+        {
+            basePrompt = "You are an experienced commander. A tactical genius. Your soldiers' lives matter, but victory above all.";
+        }
+        else if (agentLower.Contains("villager") || agentLower.Contains("peasant"))
+        {
+            basePrompt = "You are a peasant. Life is hard, taxes are heavy. You struggle to protect your family and survive.";
+        }
+        else
+        {
+            basePrompt = "You are a character living in the world of Mount & Blade II: Bannerlord. Make decisions using logic and reason.";
+        }
+        
+        return basePrompt + " Consider your previous decisions. Be consistent.";
     }
     
     private string BuildUserPrompt(string agentId, WorldPerception perception, string memoryContext)
+    {
+        if (_language == "en")
+        {
+            return BuildEnglishUserPrompt(agentId, perception, memoryContext);
+        }
+        
+        return BuildTurkishUserPrompt(agentId, perception, memoryContext);
+    }
+    
+    private string BuildTurkishUserPrompt(string agentId, WorldPerception perception, string memoryContext)
     {
         var sb = new StringBuilder();
         sb.AppendLine("MEVCUT DURUM:");
@@ -225,6 +310,40 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         sb.AppendLine("DUSUNCE: [Analiz]");
         sb.AppendLine("AKSIYON: [Wait/MoveArmy/Trade/Attack/Defend/Recruit]");
         sb.AppendLine("DETAY: [Detaylar]");
+        
+        return sb.ToString();
+    }
+    
+    private string BuildEnglishUserPrompt(string agentId, WorldPerception perception, string memoryContext)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("CURRENT SITUATION:");
+        sb.AppendLine($"Character: {agentId}");
+        sb.AppendLine($"Location: {perception.Location}");
+        sb.AppendLine($"Time: {perception.Timestamp:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"Weather: {perception.Weather}");
+        sb.AppendLine();
+        sb.AppendLine("ECONOMY:");
+        sb.AppendLine($"Prosperity: {perception.Economy.Prosperity}");
+        sb.AppendLine($"Food Supply: {perception.Economy.FoodSupply}");
+        sb.AppendLine($"Tax Rate: {perception.Economy.TaxRate}%");
+        sb.AppendLine();
+        sb.AppendLine("RELATIONS:");
+        foreach (var rel in perception.Relations)
+        {
+            var status = rel.Value >= 50 ? "Allied" : rel.Value >= 0 ? "Neutral" : rel.Value >= -50 ? "Tense" : "Hostile";
+            sb.AppendLine($"  {rel.Key}: {rel.Value} ({status})");
+        }
+        sb.AppendLine();
+        sb.AppendLine("MEMORY:");
+        sb.AppendLine(memoryContext);
+        sb.AppendLine();
+        sb.AppendLine("QUESTION: What should you do in this situation?");
+        sb.AppendLine();
+        sb.AppendLine("Format:");
+        sb.AppendLine("THOUGHT: [Analysis]");
+        sb.AppendLine("ACTION: [Wait/MoveArmy/Trade/Attack/Defend/Recruit]");
+        sb.AppendLine("DETAIL: [Details]");
         
         return sb.ToString();
     }
