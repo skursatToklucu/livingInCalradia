@@ -11,6 +11,12 @@ public sealed class AgentMemory
 {
     private readonly Dictionary<string, List<MemoryEntry>> _memories;
     private readonly int _maxMemoriesPerAgent;
+    private static bool _isTurkish = false;
+    
+    public static void SetLanguage(string language)
+    {
+        _isTurkish = language?.ToLowerInvariant() == "tr";
+    }
     
     public AgentMemory(int maxMemoriesPerAgent = 5)
     {
@@ -30,7 +36,6 @@ public sealed class AgentMemory
         
         var memories = _memories[agentId];
         
-        // Add new memory
         memories.Add(new MemoryEntry
         {
             Timestamp = DateTime.UtcNow,
@@ -39,7 +44,6 @@ public sealed class AgentMemory
             Action = action
         });
         
-        // Keep only the last N memories
         while (memories.Count > _maxMemoriesPerAgent)
         {
             memories.RemoveAt(0);
@@ -53,6 +57,7 @@ public sealed class AgentMemory
     {
         if (!_memories.TryGetValue(agentId, out var memories) || memories.Count == 0)
         {
+<<<<<<< Updated upstream
             return "Önceki kararlar?n yok - bu senin ilk karar?n.";
         }
         
@@ -60,12 +65,34 @@ public sealed class AgentMemory
         {
             $"Son {memories.Count} karar?n:"
         };
+=======
+            return _isTurkish 
+                ? "Onceki kararlarin yok - bu senin ilk kararin."
+                : "You have no previous decisions - this is your first decision.";
+        }
+        
+        var lastDecisionsLabel = _isTurkish ? $"Son {memories.Count} kararin:" : $"Your last {memories.Count} decisions:";
+        var lines = new List<string> { lastDecisionsLabel };
+>>>>>>> Stashed changes
         
         for (int i = 0; i < memories.Count; i++)
         {
             var m = memories[i];
             var timeAgo = DateTime.UtcNow - m.Timestamp;
+<<<<<<< Updated upstream
             var timeStr = timeAgo.TotalMinutes < 1 ? "az önce" : $"{timeAgo.TotalMinutes:F0} dakika önce";
+=======
+            string timeStr;
+            
+            if (_isTurkish)
+            {
+                timeStr = timeAgo.TotalMinutes < 1 ? "az once" : $"{timeAgo.TotalMinutes:F0} dakika once";
+            }
+            else
+            {
+                timeStr = timeAgo.TotalMinutes < 1 ? "just now" : $"{timeAgo.TotalMinutes:F0} minutes ago";
+            }
+>>>>>>> Stashed changes
             
             lines.Add($"  {i + 1}. [{timeStr}] {m.Action}: {TruncateText(m.Decision, 80)}");
         }
@@ -73,25 +100,16 @@ public sealed class AgentMemory
         return string.Join("\n", lines);
     }
     
-    /// <summary>
-    /// Clears all memories for an agent.
-    /// </summary>
     public void Forget(string agentId)
     {
         _memories.Remove(agentId);
     }
     
-    /// <summary>
-    /// Clears all memories.
-    /// </summary>
     public void ForgetAll()
     {
         _memories.Clear();
     }
     
-    /// <summary>
-    /// Gets the total number of memories stored.
-    /// </summary>
     public int TotalMemories
     {
         get

@@ -22,7 +22,15 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     private readonly double _temperature;
     private readonly AgentMemory _memory;
     
+<<<<<<< Updated upstream
     public GroqOrchestrator(string apiKey, string model = "llama-3.1-8b-instant", double temperature = 0.7)
+=======
+    public GroqOrchestrator(
+        string apiKey, 
+        string model = "llama-3.1-8b-instant", 
+        double temperature = 0.7,
+        string language = "en")
+>>>>>>> Stashed changes
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentNullException(nameof(apiKey));
@@ -30,6 +38,13 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         _model = model;
         _temperature = temperature;
         _memory = new AgentMemory(maxMemoriesPerAgent: 5);
+<<<<<<< Updated upstream
+=======
+        _language = language?.ToLowerInvariant() == "tr" ? "tr" : "en";
+        
+        // Set language for memory
+        AgentMemory.SetLanguage(_language);
+>>>>>>> Stashed changes
         
         _httpClient = new HttpClient
         {
