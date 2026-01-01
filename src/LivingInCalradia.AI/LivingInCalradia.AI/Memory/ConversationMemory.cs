@@ -52,11 +52,11 @@ public sealed class ConversationMemory
     {
         if (!_conversations.TryGetValue(npcId, out var entries) || entries.Count == 0)
         {
-            return "Bu oyuncu ile ilk konu?man?z.";
+            return "Bu oyuncu ile ilk konusmaniz.";
         }
         
         var sb = new StringBuilder();
-        sb.AppendLine($"Son {entries.Count} konu?man?z:");
+        sb.AppendLine($"Son {entries.Count} konusmaniz:");
         
         foreach (var entry in entries)
         {
@@ -102,10 +102,10 @@ public sealed class ConversationMemory
     
     private string FormatTimeAgo(TimeSpan timeAgo)
     {
-        if (timeAgo.TotalMinutes < 1) return "az önce";
-        if (timeAgo.TotalMinutes < 60) return $"{(int)timeAgo.TotalMinutes} dakika önce";
-        if (timeAgo.TotalHours < 24) return $"{(int)timeAgo.TotalHours} saat önce";
-        return $"{(int)timeAgo.TotalDays} gün önce";
+        if (timeAgo.TotalMinutes < 1) return "az once";
+        if (timeAgo.TotalMinutes < 60) return $"{(int)timeAgo.TotalMinutes} dakika once";
+        if (timeAgo.TotalHours < 24) return $"{(int)timeAgo.TotalHours} saat once";
+        return $"{(int)timeAgo.TotalDays} gun once";
     }
     
     private string TruncateText(string text, int maxLength)

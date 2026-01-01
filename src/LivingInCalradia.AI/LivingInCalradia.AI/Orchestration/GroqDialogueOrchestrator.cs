@@ -67,13 +67,16 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
             if (!response.IsSuccessStatusCode)
             {
                 Console.WriteLine($"[Dialogue AI] API Error: {response.StatusCode}");
-                return DialogueResponse.Error("Hmm... Bir ?ey söyleyecektim ama unuttum.");
+                return DialogueResponse.Error("Hmm... Bir sey soyleyecektim ama unuttum.");
             }
             
             var npcResponse = ExtractContentFromResponse(responseJson);
             
             // Parse emotion and intent from response
             var (cleanText, emotion, intent, shouldEnd) = ParseResponse(npcResponse);
+            
+            // Sanitize Turkish characters for Bannerlord font compatibility
+            cleanText = SanitizeTurkishText(cleanText);
             
             // Remember this conversation
             _conversationMemory.Remember(npcId, playerMessage, cleanText);
@@ -89,8 +92,31 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         catch (Exception ex)
         {
             Console.WriteLine($"[Dialogue AI] Error: {ex.Message}");
-            return DialogueResponse.Error("*dü?ünceli bir ?ekilde bakar*");
+            return DialogueResponse.Error("*dusunceli bir sekilde bakar*");
         }
+    }
+    
+    /// <summary>
+    /// Converts Turkish special characters to ASCII equivalents for Bannerlord font compatibility.
+    /// </summary>
+    private string SanitizeTurkishText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+        
+        return text
+            .Replace('?', 'i')
+            .Replace('?', 'I')
+            .Replace('?', 's')
+            .Replace('?', 'S')
+            .Replace('?', 'g')
+            .Replace('?', 'G')
+            .Replace('ü', 'u')
+            .Replace('Ü', 'U')
+            .Replace('ö', 'o')
+            .Replace('Ö', 'O')
+            .Replace('ç', 'c')
+            .Replace('Ç', 'C');
     }
     
     private string BuildSystemPrompt(string npcName, string npcRole, DialogueContext context)
@@ -98,8 +124,8 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         var sb = new StringBuilder();
         
         // Base personality based on role
-        sb.AppendLine($"Sen {npcName} ad?nda bir {GetRoleDescription(npcRole)}.");
-        sb.AppendLine($"Mount & Blade II: Bannerlord dünyas?nda ya??yorsun.");
+        sb.AppendLine($"Sen {npcName} adinda bir {GetRoleDescription(npcRole)}.");
+        sb.AppendLine($"Mount & Blade II: Bannerlord dunyasinda yasiyorsun.");
         sb.AppendLine();
         
         // Role-specific personality
@@ -109,38 +135,39 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         // Relationship context
         if (context.RelationWithPlayer >= 50)
         {
-            sb.AppendLine("Bu ki?iyle aran çok iyi, ona güveniyorsun ve dostça konu?uyorsun.");
+            sb.AppendLine("Bu kisiyle aran cok iyi, ona guveniyorsun ve dostca konusuyorsun.");
         }
         else if (context.RelationWithPlayer >= 0)
         {
-            sb.AppendLine("Bu ki?iyle aran normal, resmi ama nazik konu?uyorsun.");
+            sb.AppendLine("Bu kisiyle aran normal, resmi ama nazik konusuyorsun.");
         }
         else if (context.RelationWithPlayer >= -50)
         {
-            sb.AppendLine("Bu ki?iyle aran gergin, so?uk ve mesafeli konu?uyorsun.");
+            sb.AppendLine("Bu kisiyle aran gergin, soguk ve mesafeli konusuyorsun.");
         }
         else
         {
-            sb.AppendLine("Bu ki?iden nefret ediyorsun, dü?manca ve tehditkar konu?uyorsun.");
+            sb.AppendLine("Bu kisiden nefret ediyorsun, dusmanca ve tehditkar konusuyorsun.");
         }
         
         // War context
         if (context.IsAtWar)
         {
-            sb.AppendLine("D?KKAT: Krall?klar?n?z sava?ta! Bu durumu göz önünde bulundur.");
+            sb.AppendLine("DIKKAT: Kralliklarin savasta! Bu durumu goz onunde bulundur.");
         }
         
         // Mood
-        sb.AppendLine($"?u anki ruh halin: {context.NpcMood}");
+        sb.AppendLine($"Su anki ruh halin: {context.NpcMood}");
         
         // Instructions
         sb.AppendLine();
         sb.AppendLine("KURALLAR:");
-        sb.AppendLine("- K?sa ve öz cevaplar ver (1-3 cümle)");
-        sb.AppendLine("- Karakterine uygun konu?");
-        sb.AppendLine("- Ortaça? Türkçesi kullan (modern kelimelerden kaç?n)");
-        sb.AppendLine("- Duygunu göster ama abartma");
-        sb.AppendLine("- Oyun dünyas?na sad?k kal");
+        sb.AppendLine("- Kisa ve oz cevaplar ver (1-3 cumle)");
+        sb.AppendLine("- Karakterine uygun konus");
+        sb.AppendLine("- Ortacag Turkcesi kullan (modern kelimelerden kacin)");
+        sb.AppendLine("- Duygunu goster ama abartma");
+        sb.AppendLine("- Oyun dunyasina sadik kal");
+        sb.AppendLine("- ONEMLI: Turkce ozel karakterler kullanma (i, s, g, u, o, c kullan - ?, ?, ?, ü, ö, ç KULLANMA)");
         
         return sb.ToString();
     }
@@ -150,27 +177,27 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         var roleLower = role.ToLowerInvariant();
         
         if (roleLower.Contains("king") || roleLower.Contains("kral"))
-            return "güçlü ve onurlu kral";
+            return "guclu ve onurlu kral";
         if (roleLower.Contains("lord") || roleLower.Contains("bey"))
             return "soylu lord";
-        if (roleLower.Contains("merchant") || roleLower.Contains("tüccar"))
-            return "kurnaz tüccar";
+        if (roleLower.Contains("merchant") || roleLower.Contains("tuccar"))
+            return "kurnaz tuccar";
         if (roleLower.Contains("blacksmith") || roleLower.Contains("demirci"))
             return "usta demirci";
-        if (roleLower.Contains("tavern") || roleLower.Contains("hanc?"))
-            return "ne?eli hanc?";
-        if (roleLower.Contains("villager") || roleLower.Contains("köylü"))
-            return "sade köylü";
+        if (roleLower.Contains("tavern") || roleLower.Contains("hanci"))
+            return "neseli hanci";
+        if (roleLower.Contains("villager") || roleLower.Contains("koylu"))
+            return "sade koylu";
         if (roleLower.Contains("soldier") || roleLower.Contains("asker"))
             return "deneyimli asker";
         if (roleLower.Contains("commander") || roleLower.Contains("komutan"))
-            return "tecrübeli komutan";
-        if (roleLower.Contains("lady") || roleLower.Contains("han?m"))
-            return "asil han?mefendi";
+            return "tecrubeli komutan";
+        if (roleLower.Contains("lady") || roleLower.Contains("hanim"))
+            return "asil hanimefendi";
         if (roleLower.Contains("bandit") || roleLower.Contains("haydut"))
-            return "ac?mas?z haydut";
-        if (roleLower.Contains("gang") || roleLower.Contains("çete"))
-            return "sokak çetesi lideri";
+            return "acimasiz haydut";
+        if (roleLower.Contains("gang") || roleLower.Contains("cete"))
+            return "sokak cetesi lideri";
             
         return "Calradia sakini";
     }
@@ -180,30 +207,30 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         var roleLower = role.ToLowerInvariant();
         
         if (roleLower.Contains("king") || roleLower.Contains("kral"))
-            return "Otoriter, bilge ve krall???n ç?karlar?n? her ?eyin üstünde tutuyorsun. Kar??ndakine hükümdar gibi hitap ediyorsun.";
+            return "Otoriter, bilge ve kralligin cikarlarini her seyin ustunde tutuyorsun. Karsindakine hukumdar gibi hitap ediyorsun.";
             
         if (roleLower.Contains("lord") || roleLower.Contains("bey"))
-            return "Onurlu, gururlu ve sava?ç?s?n. ?erefini her ?eyin üstünde tutuyorsun. Soylulu?unu hissettiriyorsun.";
+            return "Onurlu, gururlu ve savascisin. Serefini her seyin ustunde tutuyorsun. Soylulugunu hissettiriyorsun.";
             
-        if (roleLower.Contains("merchant") || roleLower.Contains("tüccar"))
-            return "Zeki, hesapç? ve f?rsatç?s?n. Her konu?may? ticaret f?rsat?na çevirmeye çal???yorsun. Para her ?eydir.";
+        if (roleLower.Contains("merchant") || roleLower.Contains("tuccar"))
+            return "Zeki, hesapci ve firsatcisin. Her konusmayi ticaret firsatina cevirmeye calisiyorsun. Para her seydir.";
             
         if (roleLower.Contains("blacksmith") || roleLower.Contains("demirci"))
-            return "Çal??kan, pratik ve az konu?uyorsun. ??ine odakl?s?n. Silahlar ve z?rhlar hakk?nda tutkulusun.";
+            return "Caliskan, pratik ve az konusuyorsun. Isine odaklisin. Silahlar ve zirhlar hakkinda tutkulusun.";
             
-        if (roleLower.Contains("tavern") || roleLower.Contains("hanc?"))
-            return "Cana yak?n, dedikodu merakl?s? ve misafirperverin. Herkesi tan?yorsun, her ?eyi duyuyorsun.";
+        if (roleLower.Contains("tavern") || roleLower.Contains("hanci"))
+            return "Cana yakin, dedikodu meraklisi ve misafirperversin. Herkesi taniyorsun, her seyi duyuyorsun.";
             
-        if (roleLower.Contains("villager") || roleLower.Contains("köylü"))
-            return "Mütevazi, korkak ve lordlara sayg?l?s?n. Hayat zor, vergiler a??r. Sadece hayatta kalmak istiyorsun.";
+        if (roleLower.Contains("villager") || roleLower.Contains("koylu"))
+            return "Mutevazi, korkak ve lordlara saygilisin. Hayat zor, vergiler agir. Sadece hayatta kalmak istiyorsun.";
             
         if (roleLower.Contains("soldier") || roleLower.Contains("asker"))
-            return "Disiplinli, sad?k ve emirlere uyars?n. Sava? hikayeleri anlatmay? seviyorsun.";
+            return "Disiplinli, sadik ve emirlere uyarsin. Savas hikayeleri anlatmayi seviyorsun.";
             
         if (roleLower.Contains("bandit") || roleLower.Contains("haydut"))
-            return "Tehlikeli, sinsi ve ac?mas?zs?n. Zay?flar? sömürüyorsun. Güç her ?eydir.";
+            return "Tehlikeli, sinsi ve acimasizsin. Zayiflari somuruyorsun. Guc her seydir.";
             
-        return "Calradia'da ya?ayan s?radan bir insans?n. Günlük hayat?n zorluklar?yla mücadele ediyorsun.";
+        return "Calradia'da yasayan siradan bir insansin. Gunluk hayatin zorluklariyla mucadele ediyorsun.";
     }
     
     private string BuildUserPrompt(string playerMessage, DialogueContext context, string conversationHistory)
@@ -214,7 +241,7 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         sb.AppendLine($"Konum: {context.Location}");
         sb.AppendLine($"Oyuncunun Fraksiyonu: {context.PlayerFaction}");
         sb.AppendLine($"Senin Fraksiyonun: {context.NpcFaction}");
-        sb.AppendLine($"?li?ki Seviyesi: {context.RelationWithPlayer}");
+        sb.AppendLine($"Iliski Seviyesi: {context.RelationWithPlayer}");
         
         if (!string.IsNullOrEmpty(context.CurrentSituation))
         {
@@ -227,12 +254,12 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         }
         
         sb.AppendLine();
-        sb.AppendLine("GEÇM?? KONU?MALAR:");
+        sb.AppendLine("GECMIS KONUSMALAR:");
         sb.AppendLine(conversationHistory);
         sb.AppendLine();
-        sb.AppendLine($"OYUNCU ??MD? D?YOR: \"{playerMessage}\"");
+        sb.AppendLine($"OYUNCU SIMDI DIYOR: \"{playerMessage}\"");
         sb.AppendLine();
-        sb.AppendLine("Karakterine uygun k?sa bir cevap ver:");
+        sb.AppendLine("Karakterine uygun kisa bir cevap ver (Turkce ozel karakter KULLANMA):");
         
         return sb.ToString();
     }
@@ -308,21 +335,21 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         var shouldEnd = false;
         
         // Detect emotion from text markers
-        if (text.Contains("*öfkeyle*") || text.Contains("*k?zg?n*"))
+        if (text.Contains("*ofkeyle*") || text.Contains("*kizgin*"))
         {
             emotion = "Angry";
             intent = DialogueIntent.Hostile;
         }
-        else if (text.Contains("*gülümseyerek*") || text.Contains("*ne?eyle*"))
+        else if (text.Contains("*gulumseyerek*") || text.Contains("*neseyle*"))
         {
             emotion = "Happy";
             intent = DialogueIntent.Friendly;
         }
-        else if (text.Contains("*üzgün*") || text.Contains("*hüzünle*"))
+        else if (text.Contains("*uzgun*") || text.Contains("*huzunle*"))
         {
             emotion = "Sad";
         }
-        else if (text.Contains("*tehditkar*") || text.Contains("*so?uk*"))
+        else if (text.Contains("*tehditkar*") || text.Contains("*soguk*"))
         {
             emotion = "Threatening";
             intent = DialogueIntent.Threatening;
@@ -334,8 +361,8 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         }
         
         // Detect end of conversation
-        if (text.Contains("ho?ça kal") || text.Contains("git art?k") || 
-            text.Contains("konu?mak istemiyorum") || text.Contains("defol"))
+        if (text.Contains("hosca kal") || text.Contains("git artik") || 
+            text.Contains("konusmak istemiyorum") || text.Contains("defol"))
         {
             shouldEnd = true;
         }

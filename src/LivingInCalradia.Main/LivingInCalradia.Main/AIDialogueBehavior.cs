@@ -48,7 +48,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
         catch (Exception ex)
         {
             InformationManager.DisplayMessage(new InformationMessage(
-                $"[Living in Calradia] Diyalog hatas?: {ex.Message}", 
+                $"[Living in Calradia] Diyalog hatasi: {ex.Message}", 
                 Colors.Red));
         }
     }
@@ -83,7 +83,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_start",
             "lord_talk_speak_diplomacy_2",
             "ai_dialogue_hub",
-            "{=ai_talk}Seninle daha fazla konu?mak istiyorum.",
+            "{=ai_talk}Seninle daha fazla konusmak istiyorum.",
             CanStartAIDialogue,
             OnStartAIDialogue,
             100,
@@ -132,7 +132,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_waiting",
             "ai_dialogue_waiting_state",
             "ai_dialogue_options",
-            "{=ai_wait}*dü?ünüyor*",
+            "{=ai_wait}*dusunuyor*",
             () => _waitingForAI,
             null,
             100,
@@ -143,7 +143,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_exit",
             "ai_dialogue_options",
             "lord_pretalk",
-            "{=ai_exit}Ba?ka bir konuya geçelim.",
+            "{=ai_exit}Baska bir konuya gecelim.",
             () => true,
             null,
             1,
@@ -158,9 +158,9 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_opt_1",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt1}Nas?l gidiyor? Durumun nas?l?",
+            "{=ai_opt1}Nasil gidiyor? Durumun nasil?",
             () => _isInitialized,
-            () => TriggerAIResponse("Nas?l gidiyor? Durumun nas?l?"),
+            () => TriggerAIResponse("Nasil gidiyor? Durumun nasil?"),
             90,
             null,
             null);
@@ -170,9 +170,9 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_opt_2",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt2}Bu bölgede neler oluyor?",
+            "{=ai_opt2}Bu bolgede neler oluyor?",
             () => _isInitialized,
-            () => TriggerAIResponse("Bu bölgede neler oluyor? Bana anlat."),
+            () => TriggerAIResponse("Bu bolgede neler oluyor? Bana anlat."),
             89,
             null,
             null);
@@ -182,9 +182,9 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_opt_3",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt3}Ticaret hakk?nda ne dü?ünüyorsun?",
+            "{=ai_opt3}Ticaret hakkinda ne dusunuyorsun?",
             () => _isInitialized,
-            () => TriggerAIResponse("Ticaret hakk?nda ne dü?ünüyorsun? ?yi para kazan?yor musun?"),
+            () => TriggerAIResponse("Ticaret hakkinda ne dusunuyorsun? Iyi para kazaniyor musun?"),
             88,
             null,
             null);
@@ -194,9 +194,9 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_opt_4",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt4}Sava?lar hakk?nda ne biliyorsun?",
+            "{=ai_opt4}Savaslar hakkinda ne biliyorsun?",
             () => _isInitialized,
-            () => TriggerAIResponse("Sava?lar hakk?nda ne biliyorsun? Tehlike var m??"),
+            () => TriggerAIResponse("Savaslar hakkinda ne biliyorsun? Tehlike var mi?"),
             87,
             null,
             null);
@@ -208,7 +208,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_response_state",
             "{=ai_opt5}Bana bir tavsiye ver.",
             () => _isInitialized,
-            () => TriggerAIResponse("Bana bir tavsiye ver. Ne yapmal?y?m?"),
+            () => TriggerAIResponse("Bana bir tavsiye ver. Ne yapmaliyim?"),
             86,
             null,
             null);
@@ -218,9 +218,9 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_opt_6",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt6}Seni uyar?yorum, dikkatli ol!",
+            "{=ai_opt6}Seni uyariyorum, dikkatli ol!",
             () => _isInitialized && GetCurrentRelation() < 0,
-            () => TriggerAIResponse("Seni uyar?yorum! Yolumdan çekil yoksa sonuçlar?na katlan?rs?n!"),
+            () => TriggerAIResponse("Seni uyariyorum! Yolumdan cekil yoksa sonuclarina katlanirsin!"),
             85,
             null,
             null);
@@ -230,9 +230,9 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_opt_7",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt7}Senin gibi biriyle tan??mak onur.",
+            "{=ai_opt7}Senin gibi biriyle tanismak onur.",
             () => _isInitialized && GetCurrentRelation() >= 0,
-            () => TriggerAIResponse("Senin gibi biriyle tan??mak benim için büyük bir onur."),
+            () => TriggerAIResponse("Senin gibi biriyle tanismak benim icin buyuk bir onur."),
             84,
             null,
             null);
@@ -244,7 +244,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             "ai_dialogue_response_state",
             "{=ai_opt8}Bana kendinden bahset.",
             () => _isInitialized,
-            () => TriggerAIResponse("Bana kendinden bahset. Kim oldu?unu ve ne yapt???n? anlat."),
+            () => TriggerAIResponse("Bana kendinden bahset. Kim oldugun ve ne yaptigin hakkinda bilgi ver."),
             83,
             null,
             null);
@@ -265,7 +265,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
         if (_currentDialogueHero != null)
         {
             InformationManager.DisplayMessage(new InformationMessage(
-                $"[AI] {_currentDialogueHero.Name} ile AI sohbeti ba?l?yor...", 
+                $"[AI] {_currentDialogueHero.Name} ile AI sohbeti basliyor...", 
                 Colors.Cyan));
         }
     }
@@ -283,19 +283,19 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
         
         if (relation >= 50)
         {
-            greeting = $"Ah, dostum! Seni görmek ne güzel. Buyur, konu?al?m.";
+            greeting = "Ah, dostum! Seni gormek ne guzel. Buyur, konusalim.";
         }
         else if (relation >= 0)
         {
-            greeting = $"Evet? Benimle konu?mak istiyormu?sun. Dinliyorum.";
+            greeting = "Evet? Benimle konusmak istiyormuzsun. Dinliyorum.";
         }
         else if (relation >= -50)
         {
-            greeting = $"Ne istiyorsun? Fazla zaman?m yok.";
+            greeting = "Ne istiyorsun? Fazla zamanim yok.";
         }
         else
         {
-            greeting = $"Sen ha? Ne cesaret! Neyse, söyle bakal?m ne istiyorsun?";
+            greeting = "Sen ha? Ne cesaret! Neyse, soyle bakalim ne istiyorsun?";
         }
         
         MBTextManager.SetTextVariable("AI_GREETING", greeting);
@@ -305,7 +305,7 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
     {
         if (_dialogueOrchestrator == null || _currentDialogueHero == null)
         {
-            _lastAIResponse = "Hmm... *dü?ünceli bakar*";
+            _lastAIResponse = "Hmm... *dusunceli bakar*";
             MBTextManager.SetTextVariable("AI_RESPONSE", _lastAIResponse);
             return;
         }
@@ -334,11 +334,11 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
             if (responseTask.Wait(TimeSpan.FromSeconds(10)))
             {
                 var response = responseTask.Result;
-                _lastAIResponse = response.Text;
+                _lastAIResponse = SanitizeTurkishText(response.Text);
             }
             else
             {
-                _lastAIResponse = "*biraz dü?ündükten sonra* Sonra konu?al?m.";
+                _lastAIResponse = "*biraz dusundukten sonra* Sonra konusalim.";
             }
         }
         catch (Exception ex)
@@ -354,6 +354,30 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
         MBTextManager.SetTextVariable("AI_RESPONSE", _lastAIResponse);
     }
     
+    /// <summary>
+    /// Converts Turkish special characters to ASCII equivalents for Bannerlord font compatibility.
+    /// </summary>
+    private string SanitizeTurkishText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+        
+        // Turkish character replacements
+        return text
+            .Replace('?', 'i')
+            .Replace('?', 'I')
+            .Replace('?', 's')
+            .Replace('?', 'S')
+            .Replace('?', 'g')
+            .Replace('?', 'G')
+            .Replace('ü', 'u')
+            .Replace('Ü', 'U')
+            .Replace('ö', 'o')
+            .Replace('Ö', 'O')
+            .Replace('ç', 'c')
+            .Replace('Ç', 'C');
+    }
+    
     private DialogueContext BuildDialogueContext()
     {
         var hero = _currentDialogueHero;
@@ -366,8 +390,8 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
         var location = hero.CurrentSettlement?.Name?.ToString() ?? "Calradia";
         var relation = playerHero != null ? CharacterRelationManager.GetHeroRelation(playerHero, hero) : 0;
         
-        var npcFaction = hero.Clan?.Kingdom?.Name?.ToString() ?? hero.Clan?.Name?.ToString() ?? "Ba??ms?z";
-        var playerFaction = playerHero?.Clan?.Kingdom?.Name?.ToString() ?? playerHero?.Clan?.Name?.ToString() ?? "Ba??ms?z";
+        var npcFaction = hero.Clan?.Kingdom?.Name?.ToString() ?? hero.Clan?.Name?.ToString() ?? "Bagimsiz";
+        var playerFaction = playerHero?.Clan?.Kingdom?.Name?.ToString() ?? playerHero?.Clan?.Name?.ToString() ?? "Bagimsiz";
         
         var isAtWar = false;
         if (hero.Clan?.Kingdom != null && playerHero?.Clan?.Kingdom != null)
@@ -384,8 +408,8 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
         
         // Gather recent events
         var recentEvents = new List<string>();
-        if (isAtWar) recentEvents.Add("Sava? durumu");
-        if (hero.CurrentSettlement?.IsUnderSiege == true) recentEvents.Add("Ku?atma alt?nda");
+        if (isAtWar) recentEvents.Add("Savas durumu");
+        if (hero.CurrentSettlement?.IsUnderSiege == true) recentEvents.Add("Kusatma altinda");
         
         return new DialogueContext
         {

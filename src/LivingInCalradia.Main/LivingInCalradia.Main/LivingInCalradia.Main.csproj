@@ -4,7 +4,7 @@
     <LangVersion>10.0</LangVersion>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
-    <AssemblyName>LivingInCalradia</AssemblyName>
+    <AssemblyName>LivingInCalradia.Main</AssemblyName>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
@@ -13,12 +13,18 @@
   <PropertyGroup>
     <GameFolder>C:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord</GameFolder>
     <GameBinFolder>$(GameFolder)\bin\Win64_Shipping_wEditor</GameBinFolder>
-    <ModOutputPath>$(GameFolder)\Modules\LivingInCalradia\bin\Win64_Shipping_Client</ModOutputPath>
   </PropertyGroup>
 
-  <!-- Output directly to game mod folder -->
+  <!-- Output to project's bin folder -->
   <PropertyGroup>
-    <OutputPath>$(ModOutputPath)</OutputPath>
+    <OutputPath>bin\$(Configuration)\net472</OutputPath>
+  </PropertyGroup>
+  
+  <!-- Module output paths -->
+  <PropertyGroup>
+    <SolutionDir>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'LivingInCalradia.sln'))</SolutionDir>
+    <ProjectModulePath>$(SolutionDir)\modules\LivingInCalradia\bin\Win64_Shipping_Client</ProjectModulePath>
+    <GameModulePath>$(GameFolder)\Modules\LivingInCalradia\bin\Win64_Shipping_Client</GameModulePath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -76,4 +82,31 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  
+  <!-- Post-build: Copy to project's modules folder -->
+  <Target Name="CopyToProjectModules" AfterTargets="Build">
+    <MakeDir Directories="$(ProjectModulePath)" Condition="!Exists('$(ProjectModulePath)')" />
+    <ItemGroup>
+      <DllFiles Include="$(OutputPath)\*.dll" />
+      <ConfigFiles Include="$(OutputPath)\ai-config.json" Condition="Exists('$(OutputPath)\ai-config.json')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DllFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ConfigFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" />
+    <Message Text="[LivingInCalradia] Copied to: $(ProjectModulePath)" Importance="high" />
+  </Target>
+  
+  <!-- Post-build: Copy to game folder (if exists) -->
+  <Target Name="CopyToGameModules" AfterTargets="CopyToProjectModules" Condition="Exists('$(GameFolder)')">
+    <MakeDir Directories="$(GameModulePath)" Condition="!Exists('$(GameModulePath)')" />
+    <MakeDir Directories="$(GameFolder)\Modules\LivingInCalradia" Condition="!Exists('$(GameFolder)\Modules\LivingInCalradia')" />
+    
+    <!-- Copy DLLs and config -->
+    <ItemGroup>
+      <ModuleFiles Include="$(ProjectModulePath)\*.*" />
+      <SubModuleXml Include="$(SolutionDir)\modules\LivingInCalradia\SubModule.xml" Condition="Exists('$(SolutionDir)\modules\LivingInCalradia\SubModule.xml')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ModuleFiles)" DestinationFolder="$(GameModulePath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(SubModuleXml)" DestinationFolder="$(GameFolder)\Modules\LivingInCalradia" SkipUnchangedFiles="true" />
+    <Message Text="[LivingInCalradia] Deployed to game: $(GameModulePath)" Importance="high" />
+  </Target>
 </Project>

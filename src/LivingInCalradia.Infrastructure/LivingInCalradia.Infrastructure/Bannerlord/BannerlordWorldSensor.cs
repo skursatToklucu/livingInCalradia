@@ -230,9 +230,9 @@ public sealed class BannerlordWorldSensor : IWorldSensor
             if (hero.CurrentSettlement != null)
             {
                 var settlement = hero.CurrentSettlement;
-                var settlementType = settlement.IsTown ? "Şehir" : 
+                var settlementType = settlement.IsTown ? "Sehir" : 
                                      settlement.IsCastle ? "Kale" : 
-                                     settlement.IsVillage ? "Köy" : "Yerleşim";
+                                     settlement.IsVillage ? "Koy" : "Yerlesim";
                 
                 return $"{settlement.Name} ({settlementType})";
             }
@@ -243,7 +243,7 @@ public sealed class BannerlordWorldSensor : IWorldSensor
                 
                 if (party.BesiegedSettlement != null)
                 {
-                    return $"{party.BesiegedSettlement.Name} Kuşatması";
+                    return $"{party.BesiegedSettlement.Name} Kusatmasi";
                 }
                 
                 if (party.TargetSettlement != null)
