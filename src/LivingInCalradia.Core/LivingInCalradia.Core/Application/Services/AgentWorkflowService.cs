@@ -43,10 +43,16 @@ public class AgentWorkflowService
             // Step 2: Reason using LLM
             var decision = await _orchestrator.ReasonAsync(agentId, perception, cancellationToken);
             
-            // Step 3: Execute actions
+            // Step 3: Execute actions with agentId context
             var results = new List<ActionResult>();
             foreach (var action in decision.Actions)
             {
+                // Inject agentId into action parameters for executor
+                if (!action.Parameters.ContainsKey("agentId"))
+                {
+                    action.Parameters["agentId"] = agentId;
+                }
+                
                 if (!_actionExecutor.CanExecute(action.ActionType))
                 {
                     results.Add(ActionResult.Failed($"Unknown action: {action.ActionType}"));

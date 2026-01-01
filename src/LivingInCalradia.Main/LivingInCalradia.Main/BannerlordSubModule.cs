@@ -31,7 +31,9 @@ public class BannerlordSubModule : MBSubModuleBase
     
     // Tick timing control
     private float _lastTickTime;
-    private const float TickIntervalSeconds = 30f; // AI dü?ünme aral???
+    private float _lastKeyCheckTime;
+    private const float TickIntervalSeconds = 30f;
+    private const float KeyCheckIntervalSeconds = 0.1f;
     
     /// <summary>
     /// Called when the module is first loaded.
@@ -84,12 +86,6 @@ public class BannerlordSubModule : MBSubModuleBase
         if (game.GameType is Campaign)
         {
             Log("Campaign ba?lat?l?yor, AI sistemi haz?rlan?yor...");
-            
-            if (gameStarter is CampaignGameStarter campaignStarter)
-            {
-                // Register campaign behaviors here if needed
-                // campaignStarter.AddBehavior(new LivingInCalradiaCampaignBehavior());
-            }
         }
     }
     
@@ -125,6 +121,18 @@ public class BannerlordSubModule : MBSubModuleBase
     {
         base.OnApplicationTick(dt);
         
+        // Hotkey kontrolü her zaman çal??s?n (pause'da da test yapabilelim)
+        _lastKeyCheckTime += dt;
+        if (_lastKeyCheckTime >= KeyCheckIntervalSeconds)
+        {
+            _lastKeyCheckTime = 0f;
+            CheckHotkeys();
+        }
+        
+        // Oyun duraklat?lm??sa AI çal??mas?n
+        if (IsGamePaused())
+            return;
+        
         if (!_isInitialized || Campaign.Current == null)
             return;
         
@@ -135,6 +143,207 @@ public class BannerlordSubModule : MBSubModuleBase
         {
             _lastTickTime = 0f;
             ProcessAIAgentsAsync().ConfigureAwait(false);
+        }
+    }
+    
+    /// <summary>
+    /// Checks if game is paused or in a state where AI should NOT run
+    /// </summary>
+    private bool IsGamePaused()
+    {
+        try
+        {
+            if (Campaign.Current == null)
+                return true;
+            
+            // TimeControlMode.Stop = Oyun tamamen durduruldu (ESC veya Space)
+            var mode = Campaign.Current.TimeControlMode;
+            if (mode == CampaignTimeControlMode.Stop)
+            {
+                return true;
+            }
+            
+            // Game.Current kontrolü
+            if (Game.Current == null)
+                return true;
+            
+            // GameStateManager kontrolü
+            var gameStateManager = Game.Current.GameStateManager;
+            if (gameStateManager == null)
+                return true;
+            
+            var activeState = gameStateManager.ActiveState;
+            if (activeState == null)
+                return true;
+            
+            // State tipini kontrol et
+            var stateTypeName = activeState.GetType().Name;
+            
+            // SADECE MapState'de çal?? - di?er tüm state'lerde durdur
+            // MissionState = Sava?
+            // MenuGameState = Menü
+            // MapState = Harita (AI çal??mal?)
+            
+            // Sava? kontrolü - MissionState varsa durdur
+            if (stateTypeName.Contains("Mission"))
+            {
+                return true; // Sava?ta - AI durmal?
+            }
+            
+            // Menü kontrolü
+            if (stateTypeName.Contains("Menu"))
+            {
+                return true; // Menüde - AI durmal?
+            }
+            
+            // Diyalog/Konu?ma kontrolü
+            if (stateTypeName.Contains("Conversation") || stateTypeName.Contains("Dialog"))
+            {
+                return true; // Diyalogda - AI durmal?
+            }
+            
+            // Encounter (kar??la?ma) kontrolü
+            if (stateTypeName.Contains("Encounter"))
+            {
+                return true; // Kar??la?mada - AI durmal?
+            }
+            
+            // Ku?atma ekran? kontrolü
+            if (stateTypeName.Contains("Siege"))
+            {
+                return true; // Ku?atma ekran?nda - AI durmal?
+            }
+            
+            // MapState de?ilse durdur (güvenli taraf)
+            if (!stateTypeName.Contains("Map"))
+            {
+                return true;
+            }
+            
+            return false;
+        }
+        catch
+        {
+            return true; // Hata durumunda güvenli tarafta kal
+        }
+    }
+    
+    /// <summary>
+    /// Check hotkeys for manual testing
+    /// </summary>
+    private void CheckHotkeys()
+    {
+        try
+        {
+            // NumPad1 = Full Proof Test
+            if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad1))
+            {
+                Log("Full Proof Test ba?lat?l?yor...");
+                BannerlordActionExecutor.RunFullAIProofTest();
+            }
+            
+            // NumPad2 = Tek lord için AI dü?ünme
+            if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad2))
+            {
+                TriggerSingleLordThinking();
+            }
+            
+            // NumPad3 = H?zl? test
+            if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad3))
+            {
+                Log("H?zl? Proof Test ba?lat?l?yor...");
+                BannerlordActionExecutor.RunProofTest();
+            }
+        }
+        catch
+        {
+            // Input system might not be available
+        }
+    }
+    
+    /// <summary>
+    /// Triggers AI thinking for a single random lord
+    /// </summary>
+    private void TriggerSingleLordThinking()
+    {
+        if (!_isInitialized || _workflowService == null)
+        {
+            LogError("AI sistemi henüz haz?r de?il!");
+            return;
+        }
+        
+        // NumPad2'ye bas?ld???nda pause kontrolü yapma - manuel test için izin ver
+        // Ama async i?lem s?ras?nda kontrol et
+        
+        try
+        {
+            var mainHero = Hero.MainHero;
+            if (mainHero == null || Campaign.Current?.AliveHeroes == null)
+                return;
+            
+            // Rastgele bir lord seç
+            Hero? selectedLord = null;
+            foreach (var hero in Campaign.Current.AliveHeroes)
+            {
+                if (hero != mainHero && hero.IsLord && hero.Clan?.Kingdom != null)
+                {
+                    selectedLord = hero;
+                    break;
+                }
+            }
+            
+            if (selectedLord == null)
+            {
+                LogError("Dü?ünecek lord bulunamad?!");
+                return;
+            }
+            
+            var agentId = GetAgentId(selectedLord);
+            var heroInfo = GetHeroDisplayInfo(selectedLord);
+            
+            Log($"{heroInfo} dü?ünüyor...");
+            
+            // Async olarak çal??t?r
+            var lord = selectedLord; // Capture for closure
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var result = await _workflowService.ExecuteWorkflowAsync(agentId);
+                    
+                    // Async i?lem bittikten sonra pause kontrolü
+                    if (IsGamePaused())
+                    {
+                        Log("Oyun duraklat?ld?, AI sonucu gösterilmeyecek.");
+                        return;
+                    }
+                    
+                    if (result.IsSuccessful && result.Decision != null)
+                    {
+                        LogAI($"{lord.Name}: {GetShortReasoning(result.Decision.Reasoning)}");
+                        
+                        foreach (var action in result.Decision.Actions)
+                        {
+                            var detail = action.Parameters.ContainsKey("detail")
+                                ? action.Parameters["detail"]?.ToString()
+                                : "";
+                            Log($"  ? {action.ActionType}: {detail}");
+                        }
+                    }
+                    else
+                    {
+                        LogError($"Workflow ba?ar?s?z: {result.Error?.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogError($"AI dü?ünme hatas?: {ex.Message}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            LogError($"TriggerSingleLordThinking hatas?: {ex.Message}");
         }
     }
     
@@ -179,10 +388,11 @@ public class BannerlordSubModule : MBSubModuleBase
             
             _isInitialized = true;
             Log("AI sistemi ba?ar?yla ba?lat?ld?!");
+            Log("Hotkeys: NumPad1=FullTest, NumPad2=AI, NumPad3=QuickTest");
             
             // Display in-game message
             InformationManager.DisplayMessage(new InformationMessage(
-                "Living in Calradia AI sistemi aktif!",
+                "Living in Calradia AI sistemi aktif! NumPad1/2/3 ile test edin.",
                 Colors.Green));
         }
         catch (Exception ex)
@@ -202,37 +412,86 @@ public class BannerlordSubModule : MBSubModuleBase
         if (_workflowService == null || Campaign.Current == null)
             return;
         
+        // Ba?lamadan önce kontrol
+        if (IsGamePaused())
+        {
+            Log("Oyun duraklat?ld?, AI i?lemi iptal edildi.");
+            return;
+        }
+        
         try
         {
-            // Get nearby lords or important NPCs
             var mainHero = Hero.MainHero;
             if (mainHero == null)
                 return;
             
-            // Find nearby heroes to process
             var nearbyHeroes = GetNearbyHeroes(mainHero, maxDistance: 100f);
             
             foreach (var hero in nearbyHeroes)
             {
+                // Her hero i?lemeden önce pause kontrolü
+                if (IsGamePaused())
+                {
+                    Log("Oyun duraklat?ld?, AI döngüsü durduruluyor.");
+                    return;
+                }
+                
                 if (hero == mainHero || hero.IsDead)
                     continue;
                 
                 var agentId = GetAgentId(hero);
+                var heroInfo = GetHeroDisplayInfo(hero);
                 
-                Log($"AI dü?ünüyor: {hero.Name}");
+                Log($"{heroInfo} dü?ünüyor...");
                 
                 var result = await _workflowService.ExecuteWorkflowAsync(agentId);
                 
-                if (result.IsSuccessful)
+                // Async i?lem sonras? tekrar kontrol
+                if (IsGamePaused())
                 {
-                    Log($"{hero.Name} karar verdi: {result.Decision?.Actions.Count ?? 0} aksiyon");
+                    Log("Oyun duraklat?ld?, sonuç uygulanmayacak.");
+                    return;
+                }
+                
+                if (result.IsSuccessful && result.Decision != null)
+                {
+                    var actions = result.Decision.Actions;
+                    var reasoning = result.Decision.Reasoning;
+                    var shortReasoning = GetShortReasoning(reasoning);
+                    
+                    if (!string.IsNullOrEmpty(shortReasoning))
+                    {
+                        LogAI($"{hero.Name}: {shortReasoning}");
+                    }
+                    
+                    if (actions.Count > 0)
+                    {
+                        foreach (var action in actions)
+                        {
+                            var detail = action.Parameters.ContainsKey("detail") 
+                                ? action.Parameters["detail"]?.ToString() 
+                                : "";
+                            
+                            if (!string.IsNullOrEmpty(detail))
+                            {
+                                Log($"{heroInfo} ? {action.ActionType}: {detail}");
+                            }
+                            else
+                            {
+                                Log($"{heroInfo} ? {action.ActionType}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Log($"{heroInfo} beklemeye karar verdi");
+                    }
                 }
                 else
                 {
-                    LogError($"{hero.Name} için workflow ba?ar?s?z: {result.Error?.Message}");
+                    LogError($"{heroInfo} için workflow ba?ar?s?z: {result.Error?.Message}");
                 }
                 
-                // Rate limiting - bir hero i?lendikten sonra bekle
                 await Task.Delay(500);
             }
         }
@@ -242,42 +501,94 @@ public class BannerlordSubModule : MBSubModuleBase
         }
     }
     
-    /// <summary>
-    /// Gets heroes near the main hero.
-    /// </summary>
+    private string GetShortReasoning(string reasoning)
+    {
+        if (string.IsNullOrEmpty(reasoning))
+            return "";
+        
+        var lines = reasoning.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("DUSUNCE:", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("DÜ?ÜNCE:", StringComparison.OrdinalIgnoreCase))
+            {
+                var thought = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
+                if (thought.Length > 150)
+                    return thought.Substring(0, 147) + "...";
+                return thought;
+            }
+        }
+        
+        var clean = reasoning.Replace("\n", " ").Replace("\r", "").Trim();
+        if (clean.Length > 150)
+            return clean.Substring(0, 147) + "...";
+        return clean;
+    }
+    
+    private string GetHeroDisplayInfo(Hero hero)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        if (hero.IsFactionLeader)
+            sb.Append("Kral ");
+        else if (hero.IsLord)
+            sb.Append("Lord ");
+        else if (hero.IsNotable)
+            sb.Append("Notable ");
+        
+        sb.Append(hero.Name);
+        
+        if (hero.Clan != null)
+        {
+            sb.Append($" ({hero.Clan.Name}");
+            if (hero.Clan.Kingdom != null)
+                sb.Append($" - {hero.Clan.Kingdom.Name}");
+            sb.Append(")");
+        }
+        
+        return sb.ToString();
+    }
+    
     private System.Collections.Generic.List<Hero> GetNearbyHeroes(Hero mainHero, float maxDistance)
     {
         var nearbyHeroes = new System.Collections.Generic.List<Hero>();
+        var random = new Random();
         
         if (Campaign.Current?.AliveHeroes == null)
             return nearbyHeroes;
+        
+        var eligibleHeroes = new System.Collections.Generic.List<Hero>();
         
         foreach (var hero in Campaign.Current.AliveHeroes)
         {
             if (hero == mainHero || hero.IsDead)
                 continue;
             
-            // Sadece lordlar? ve önemli NPC'leri i?le
             if (!hero.IsLord && !hero.IsNotable)
                 continue;
             
-            // Mesafe kontrolü (basitle?tirilmi?)
-            if (hero.CurrentSettlement == mainHero.CurrentSettlement)
+            if (mainHero.CurrentSettlement != null && 
+                hero.CurrentSettlement == mainHero.CurrentSettlement)
             {
-                nearbyHeroes.Add(hero);
+                eligibleHeroes.Add(hero);
             }
-            
-            // Maksimum 3 hero i?le (performans için)
-            if (nearbyHeroes.Count >= 3)
-                break;
+            else if (mainHero.PartyBelongedTo != null && hero.PartyBelongedTo != null)
+            {
+                eligibleHeroes.Add(hero);
+            }
+        }
+        
+        while (nearbyHeroes.Count < 3 && eligibleHeroes.Count > 0)
+        {
+            var index = random.Next(eligibleHeroes.Count);
+            nearbyHeroes.Add(eligibleHeroes[index]);
+            eligibleHeroes.RemoveAt(index);
         }
         
         return nearbyHeroes;
     }
     
-    /// <summary>
-    /// Creates a unique agent ID for a hero.
-    /// </summary>
     private string GetAgentId(Hero hero)
     {
         var heroType = hero.IsLord ? "Lord" : hero.IsNotable ? "Notable" : "Hero";
@@ -293,8 +604,16 @@ public class BannerlordSubModule : MBSubModuleBase
             $"{ModName} {message}",
             Colors.Cyan));
         
-        // Also log to debug
         Debug.Print($"{ModName} {message}");
+    }
+    
+    private static void LogAI(string message)
+    {
+        InformationManager.DisplayMessage(new InformationMessage(
+            $"[AI] {message}",
+            Colors.Yellow));
+        
+        Debug.Print($"[AI] {message}");
     }
     
     private static void LogError(string message)
