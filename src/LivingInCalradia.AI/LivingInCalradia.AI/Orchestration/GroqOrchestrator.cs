@@ -161,8 +161,8 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
             }
         }
         
-        // Fallback: return first 100 chars
-        return fullResponse.Length > 100 ? fullResponse.Substring(0, 100) : fullResponse;
+        // Fallback: return full response without truncation
+        return fullResponse;
     }
     
     private string GetPersonalityPrompt(string agentId)
