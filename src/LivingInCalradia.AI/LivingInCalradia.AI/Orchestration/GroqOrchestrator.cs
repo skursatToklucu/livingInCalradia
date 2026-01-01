@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using LivingInCalradia.AI.Memory;
@@ -53,19 +52,8 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         var memoryContext = _memory.GetMemoryContext(agentId);
         var userPrompt = BuildUserPrompt(agentId, perception, memoryContext);
 
-        var requestBody = new
-        {
-            model = _model,
-            messages = new[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
-            },
-            temperature = _temperature,
-            max_tokens = 600
-        };
-        
-        var json = JsonSerializer.Serialize(requestBody);
+        // Build JSON manually to avoid System.Text.Json issues
+        var json = BuildRequestJson(systemPrompt, userPrompt);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         
         var response = await _httpClient.PostAsync("chat/completions", content, cancellationToken);
@@ -76,15 +64,10 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
             throw new HttpRequestException($"Groq API error: {response.StatusCode}\n{responseJson}");
         }
         
-        // Parse response
-        using var doc = JsonDocument.Parse(responseJson);
-        var messageContent = doc.RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString() ?? "No response";
+        // Parse response manually
+        var messageContent = ExtractContentFromResponse(responseJson);
         
-        Console.WriteLine($"\n?? [AI YANITI]\n{messageContent}\n");
+        Console.WriteLine($"\n[AI YANITI]\n{messageContent}\n");
         
         // Parse action from response
         var actions = ParseActions(messageContent);
@@ -98,14 +81,81 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         return decision;
     }
     
+    private string BuildRequestJson(string systemPrompt, string userPrompt)
+    {
+        // Escape special characters for JSON
+        var escapedSystem = EscapeJson(systemPrompt);
+        var escapedUser = EscapeJson(userPrompt);
+        
+        return $@"{{
+            ""model"": ""{_model}"",
+            ""messages"": [
+                {{""role"": ""system"", ""content"": ""{escapedSystem}""}},
+                {{""role"": ""user"", ""content"": ""{escapedUser}""}}
+            ],
+            ""temperature"": {_temperature.ToString(System.Globalization.CultureInfo.InvariantCulture)},
+            ""max_tokens"": 600
+        }}";
+    }
+    
+    private string EscapeJson(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        
+        return text
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t");
+    }
+    
+    private string ExtractContentFromResponse(string json)
+    {
+        try
+        {
+            // Simple parsing - find "content": "..." in response
+            var contentMarker = "\"content\":";
+            var contentIndex = json.LastIndexOf(contentMarker);
+            
+            if (contentIndex == -1)
+                return "No response";
+            
+            var startIndex = json.IndexOf('"', contentIndex + contentMarker.Length) + 1;
+            var endIndex = startIndex;
+            
+            // Find the closing quote, handling escaped quotes
+            while (endIndex < json.Length)
+            {
+                if (json[endIndex] == '"' && json[endIndex - 1] != '\\')
+                    break;
+                endIndex++;
+            }
+            
+            var content = json.Substring(startIndex, endIndex - startIndex);
+            
+            // Unescape
+            return content
+                .Replace("\\n", "\n")
+                .Replace("\\r", "\r")
+                .Replace("\\t", "\t")
+                .Replace("\\\"", "\"")
+                .Replace("\\\\", "\\");
+        }
+        catch
+        {
+            return "Parse error";
+        }
+    }
+    
     private string ExtractShortDecision(string fullResponse)
     {
-        // Extract just the DÜ?ÜNCE part for memory
+        // Extract just the DUSUNCE part for memory
         var lines = fullResponse.Split('\n');
         foreach (var line in lines)
         {
-            if (line.Trim().StartsWith("DÜ?ÜNCE:", StringComparison.OrdinalIgnoreCase) ||
-                line.Trim().StartsWith("DUSUNCE:", StringComparison.OrdinalIgnoreCase))
+            if (line.Trim().StartsWith("DUSUNCE:", StringComparison.OrdinalIgnoreCase) ||
+                line.Trim().StartsWith("DÜ?ÜNCE:", StringComparison.OrdinalIgnoreCase))
             {
                 return line.Substring(line.IndexOf(':') + 1).Trim();
             }
@@ -123,85 +173,59 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         
         if (agentLower.Contains("king") || agentLower.Contains("caladog"))
         {
-            basePrompt = @"Sen Battania Kral? Caladog'sun. Klan ?eflerinin birle?ik liderli?inden gelen güçlü, onurlu ve sava?ç? bir krals?n.
-Kararlar?n halk?n?n iyili?i ve krall???n?n geni?lemesi için olmal?. Dü?manlar?na kar?? ac?mas?z, müttefiklerine kar?? sad?k ol.
-Stratejik dü?ün - sava? m? açmal?s?n, ittifak m? kurmal?s?n, yoksa beklemeli misin?";
+            basePrompt = "Sen Battania Krali Caladog'sun. Guclu, onurlu ve savasci bir kralsin. Kararlarin halkin iyiligi ve kralliginin genislemesi icin olmali.";
         }
         else if (agentLower.Contains("merchant") || agentLower.Contains("trader"))
         {
-            basePrompt = @"Sen zengin bir Vlandian tüccars?n. Para kazanmak ve ticaret a??n? geni?letmek en büyük önceli?in.
-Risk ve getiri dengesini iyi hesaplars?n. Sava? bölgelerinden kaç?n?r, bar??ç?l rotalar tercih edersin.
-Fiyatlar?, arz-talebi ve güvenli yollar? de?erlendir.";
+            basePrompt = "Sen zengin bir tuccarsin. Para kazanmak ve ticaret agini genisletmek en buyuk onceligin.";
         }
-        else if (agentLower.Contains("commander") || agentLower.Contains("unqid"))
+        else if (agentLower.Contains("commander") || agentLower.Contains("general"))
         {
-            basePrompt = @"Sen deneyimli bir Aserai komutan?s?n. Çöl sava?lar?nda pi?mi?, taktik dahisi bir generalsin.
-Askerlerinin hayat? senin için önemli ama zafer her ?eyden üstün. Dü?man güçlerini analiz et, zay?f noktalar? bul.
-Sald?rmal? m?s?n, savunmal? m?s?n, yoksa geri çekilmeli misin?";
+            basePrompt = "Sen deneyimli bir komutansin. Taktik dahisi bir generalsin. Askerlerinin hayati onemli ama zafer her seyden ustun.";
         }
         else if (agentLower.Contains("villager") || agentLower.Contains("peasant"))
         {
-            basePrompt = @"Sen fakir bir Sturgian köylüsün. Hayat zor, vergiler a??r, k?? so?uk.
-Aileni korumak ve hayatta kalmak için mücadele ediyorsun. Lordlara güvenmezsin ama isyan etmek de tehlikeli.
-Bugün ne yapmal?s?n - çal??mal? m?s?n, saklanmal? m?s?n, yoksa yard?m m? aramal?s?n?";
-        }
-        else if (agentLower.Contains("archer") || agentLower.Contains("soldier") || agentLower.Contains("temur"))
-        {
-            basePrompt = @"Sen bir Khuzait atl? okçususun. Bozk?rlar?n özgür ruhlu sava?ç?s?, at?n?n üstünde do?dun.
-H?z ve hareket senin silah?n. Dü?man? uzaktan vur, yakla?mas?na izin verme.
-Devriye görevinde ne yapmal?s?n - ke?if mi, pusu mu, yoksa geri dönü? mü?";
+            basePrompt = "Sen bir koylusun. Hayat zor, vergiler agir. Aileni korumak ve hayatta kalmak icin mucadele ediyorsun.";
         }
         else
         {
-            basePrompt = @"Sen Mount & Blade II: Bannerlord dünyas?nda ya?ayan bir karaktersin.
-Oyun dünyas? hakk?nda mant?k yürüt ve karakterin için anlaml? kararlar ver.";
+            basePrompt = "Sen Mount & Blade II: Bannerlord dunyasinda yasayan bir karaktersin. Mantik yuruterek kararlar ver.";
         }
         
-        // Add memory instruction
-        return basePrompt + @"
-ÖNEML?: Önceki kararlar?n? göz önünde bulundur. Tutarl? ol ama duruma göre adapte ol.
-Ayn? hatay? tekrarlama, ba?ar?l? stratejileri devam ettir.";
+        return basePrompt + " Onceki kararlarini goz onunde bulundur. Tutarli ol.";
     }
     
     private string BuildUserPrompt(string agentId, WorldPerception perception, string memoryContext)
     {
-        return $@"
-?? MEVCUT DURUM:
-????????????????????????????
-Karakter: {agentId}
-Konum: {perception.Location}
-Zaman: {perception.Timestamp:yyyy-MM-dd HH:mm}
-Hava: {perception.Weather}
-
-?? EKONOM?:
-Refah Seviyesi: {perception.Economy.Prosperity}
-G?da Stoku: {perception.Economy.FoodSupply}
-Vergi Oran?: %{perception.Economy.TaxRate}
-
-?? ?L??K?LER:
-{FormatRelations(perception.Relations)}
-
-?? HAFIZA (Önceki Kararlar?n):
-{memoryContext}
-
-????????????????????????????
-SORU: Bu durumda ne yapmal?s?n? Önceki kararlar?n? da göz önünde bulundur.
-
-Format:
-DÜ?ÜNCE: [Analiz ve mant?k yürütme]
-AKS?YON: [StartSiege/GiveGold/ChangeRelation/MoveArmy/RecruitTroops/Wait]
-DETAY: [Aksiyonun detaylar?]";
-    }
-    
-    private string FormatRelations(IDictionary<string, int> relations)
-    {
         var sb = new StringBuilder();
-        foreach (var relation in relations)
+        sb.AppendLine("MEVCUT DURUM:");
+        sb.AppendLine($"Karakter: {agentId}");
+        sb.AppendLine($"Konum: {perception.Location}");
+        sb.AppendLine($"Zaman: {perception.Timestamp:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"Hava: {perception.Weather}");
+        sb.AppendLine();
+        sb.AppendLine("EKONOMI:");
+        sb.AppendLine($"Refah: {perception.Economy.Prosperity}");
+        sb.AppendLine($"Gida: {perception.Economy.FoodSupply}");
+        sb.AppendLine($"Vergi: %{perception.Economy.TaxRate}");
+        sb.AppendLine();
+        sb.AppendLine("ILISKILER:");
+        foreach (var rel in perception.Relations)
         {
-            var emoji = relation.Value >= 50 ? "??" : relation.Value >= 0 ? "??" : relation.Value >= -50 ? "??" : "??";
-            var status = relation.Value >= 50 ? "Müttefik" : relation.Value >= 0 ? "Nötr" : relation.Value >= -50 ? "Gergin" : "Dü?man";
-            sb.AppendLine($"  {emoji} {relation.Key}: {relation.Value} ({status})");
+            var status = rel.Value >= 50 ? "Muttefik" : rel.Value >= 0 ? "Notr" : rel.Value >= -50 ? "Gergin" : "Dusman";
+            sb.AppendLine($"  {rel.Key}: {rel.Value} ({status})");
         }
+        sb.AppendLine();
+        sb.AppendLine("HAFIZA:");
+        sb.AppendLine(memoryContext);
+        sb.AppendLine();
+        sb.AppendLine("SORU: Bu durumda ne yapmalisin?");
+        sb.AppendLine();
+        sb.AppendLine("Format:");
+        sb.AppendLine("DUSUNCE: [Analiz]");
+        sb.AppendLine("AKSIYON: [Wait/MoveArmy/Trade/Attack/Defend/Recruit]");
+        sb.AppendLine("DETAY: [Detaylar]");
+        
         return sb.ToString();
     }
     
@@ -217,8 +241,7 @@ DETAY: [Aksiyonun detaylar?]";
         {
             var trimmed = line.Trim();
             
-            if (trimmed.StartsWith("AKS?YON:", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.StartsWith("AKSIYON:", StringComparison.OrdinalIgnoreCase) ||
+            if (trimmed.StartsWith("AKSIYON:", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.StartsWith("ACTION:", StringComparison.OrdinalIgnoreCase))
             {
                 actionType = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
