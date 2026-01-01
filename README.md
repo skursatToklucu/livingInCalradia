@@ -4,13 +4,16 @@
 
 > *"When NPCs start thinking for themselves..."*
 
-This mod gives NPCs the ability to **think, reason, and make decisions** using Large Language Models (LLMs). Instead of scripted behaviors, each lord analyzes their situation and chooses actions based on their personality, relationships, and goals.
-
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+[![Steam Workshop](https://img.shields.io/badge/Steam%20Workshop-Subscribe-blue?logo=steam)](https://steamcommunity.com/sharedfiles/filedetails/?id=3636535251)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Bannerlord](https://img.shields.io/badge/Bannerlord-e1.0.0+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
-> ?? **Language Support**: English and Turkish. Set `"Language": "en"` or `"Language": "tr"` in config.
+This mod gives NPCs the ability to **think, reason, and make decisions** using Large Language Models (LLMs). Instead of scripted behaviors, each lord analyzes their situation and chooses actions based on their personality, relationships, and goals.
+
+## ?? Quick Install
+
+**[?? Subscribe on Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3636535251)**
 
 ---
 
