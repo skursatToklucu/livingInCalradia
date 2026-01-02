@@ -53,19 +53,19 @@ public sealed class AgentMemory
     {
         if (!_memories.TryGetValue(agentId, out var memories) || memories.Count == 0)
         {
-            return "Onceki kararlarin yok - bu senin ilk kararin.";
+            return "No previous decisions - this is your first decision.";
         }
         
         var lines = new List<string>
         {
-            $"Son {memories.Count} kararin:"
+            $"Your last {memories.Count} decisions:"
         };
         
         for (int i = 0; i < memories.Count; i++)
         {
             var m = memories[i];
             var timeAgo = DateTime.UtcNow - m.Timestamp;
-            var timeStr = timeAgo.TotalMinutes < 1 ? "az once" : $"{timeAgo.TotalMinutes:F0} dakika once";
+            var timeStr = timeAgo.TotalMinutes < 1 ? "just now" : $"{timeAgo.TotalMinutes:F0} minutes ago";
             
             lines.Add($"  {i + 1}. [{timeStr}] {m.Action}: {TruncateText(m.Decision, 80)}");
         }

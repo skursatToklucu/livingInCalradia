@@ -52,11 +52,11 @@ public sealed class ConversationMemory
     {
         if (!_conversations.TryGetValue(npcId, out var entries) || entries.Count == 0)
         {
-            return "Bu oyuncu ile ilk konusmaniz.";
+            return "This is your first conversation with this player.";
         }
         
         var sb = new StringBuilder();
-        sb.AppendLine($"Son {entries.Count} konusmaniz:");
+        sb.AppendLine($"Your last {entries.Count} conversations:");
         
         foreach (var entry in entries)
         {
@@ -64,8 +64,8 @@ public sealed class ConversationMemory
             var timeStr = FormatTimeAgo(timeAgo);
             
             sb.AppendLine($"  [{timeStr}]");
-            sb.AppendLine($"    Oyuncu: {TruncateText(entry.PlayerMessage, 100)}");
-            sb.AppendLine($"    Sen: {TruncateText(entry.NpcResponse, 100)}");
+            sb.AppendLine($"    Player: {TruncateText(entry.PlayerMessage, 100)}");
+            sb.AppendLine($"    You: {TruncateText(entry.NpcResponse, 100)}");
         }
         
         return sb.ToString();
@@ -102,10 +102,10 @@ public sealed class ConversationMemory
     
     private string FormatTimeAgo(TimeSpan timeAgo)
     {
-        if (timeAgo.TotalMinutes < 1) return "az once";
-        if (timeAgo.TotalMinutes < 60) return $"{(int)timeAgo.TotalMinutes} dakika once";
-        if (timeAgo.TotalHours < 24) return $"{(int)timeAgo.TotalHours} saat once";
-        return $"{(int)timeAgo.TotalDays} gun once";
+        if (timeAgo.TotalMinutes < 1) return "just now";
+        if (timeAgo.TotalMinutes < 60) return $"{(int)timeAgo.TotalMinutes} minutes ago";
+        if (timeAgo.TotalHours < 24) return $"{(int)timeAgo.TotalHours} hours ago";
+        return $"{(int)timeAgo.TotalDays} days ago";
     }
     
     private string TruncateText(string text, int maxLength)

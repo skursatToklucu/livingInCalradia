@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
-using LivingInCalradia.Main.Localization;
 
 namespace LivingInCalradia.Main.Features;
 
@@ -45,16 +44,12 @@ public static class LordThoughtsPanel
     {
         if (_recentThoughts.Count == 0)
         {
-            var msg = LocalizedStrings.IsTurkish 
-                ? "Henuz lord dusuncesi kaydedilmedi. NumPad2 ile AI'yi tetikleyin."
-                : "No lord thoughts recorded yet. Trigger AI with NumPad2.";
-            ShowMessage(msg, Colors.Yellow);
+            ShowMessage("No lord thoughts recorded yet. Trigger AI with NumPad2.", Colors.Yellow);
             return;
         }
         
         ShowMessage("", Colors.White);
-        var title = LocalizedStrings.IsTurkish ? "========== LORD DUSUNCELERI ==========" : "========== LORD THOUGHTS ==========";
-        ShowMessage(title, Colors.Magenta);
+        ShowMessage("========== LORD THOUGHTS ==========", Colors.Magenta);
         ShowMessage("", Colors.White);
         
         foreach (var thought in _recentThoughts)
@@ -63,10 +58,8 @@ public static class LordThoughtsPanel
             var timeStr = FormatTimeAgo(timeAgo);
             
             ShowMessage($"[{timeStr}] {thought.LordName}:", Colors.Cyan);
-            var thoughtLabel = LocalizedStrings.IsTurkish ? "Dusunce" : "Thought";
-            ShowMessage($"  {thoughtLabel}: \"{thought.Thought}\"", Colors.White);
-            var decisionLabel = LocalizedStrings.IsTurkish ? "Karar" : "Decision";
-            ShowMessage($"  {decisionLabel}: {thought.Action}", Colors.Green);
+            ShowMessage($"  Thought: \"{thought.Thought}\"", Colors.White);
+            ShowMessage($"  Decision: {thought.Action}", Colors.Green);
             ShowMessage("", Colors.White);
         }
         
@@ -78,10 +71,7 @@ public static class LordThoughtsPanel
     /// </summary>
     public static void ShowThinkingNotification(string lordName)
     {
-        var msg = LocalizedStrings.IsTurkish 
-            ? $"[AI] {lordName} bir karar veriyor..."
-            : $"[AI] {lordName} is making a decision...";
-        ShowMessage(msg, Colors.Yellow);
+        ShowMessage($"[AI] {lordName} is making a decision...", Colors.Yellow);
     }
     
     /// <summary>
@@ -101,37 +91,34 @@ public static class LordThoughtsPanel
     private static string GetActionEmoji(string action)
     {
         var actionLower = action.ToLowerInvariant();
-        var isTr = LocalizedStrings.IsTurkish;
         
         if (actionLower.Contains("attack") || actionLower.Contains("war"))
-            return isTr ? "[SALDIRI]" : "[ATTACK]";
-        if (actionLower.Contains("peace") || actionLower.Contains("baris"))
-            return isTr ? "[BARIS]" : "[PEACE]";
-        if (actionLower.Contains("trade") || actionLower.Contains("ticaret"))
-            return isTr ? "[TICARET]" : "[TRADE]";
-        if (actionLower.Contains("move") || actionLower.Contains("hareket"))
-            return isTr ? "[HAREKET]" : "[MOVE]";
-        if (actionLower.Contains("recruit") || actionLower.Contains("asker"))
-            return isTr ? "[TOPLAMA]" : "[RECRUIT]";
-        if (actionLower.Contains("defend") || actionLower.Contains("savunma"))
-            return isTr ? "[SAVUNMA]" : "[DEFEND]";
-        if (actionLower.Contains("siege") || actionLower.Contains("kusatma"))
-            return isTr ? "[KUSATMA]" : "[SIEGE]";
-        if (actionLower.Contains("wait") || actionLower.Contains("bekle"))
-            return isTr ? "[BEKLEME]" : "[WAIT]";
+            return "[ATTACK]";
+        if (actionLower.Contains("peace"))
+            return "[PEACE]";
+        if (actionLower.Contains("trade"))
+            return "[TRADE]";
+        if (actionLower.Contains("move"))
+            return "[MOVE]";
+        if (actionLower.Contains("recruit"))
+            return "[RECRUIT]";
+        if (actionLower.Contains("defend"))
+            return "[DEFEND]";
+        if (actionLower.Contains("siege"))
+            return "[SIEGE]";
+        if (actionLower.Contains("wait"))
+            return "[WAIT]";
             
-        return isTr ? "[KARAR]" : "[DECISION]";
+        return "[DECISION]";
     }
     
     private static string FormatTimeAgo(TimeSpan timeAgo)
     {
-        var isTr = LocalizedStrings.IsTurkish;
-        
         if (timeAgo.TotalSeconds < 60)
-            return isTr ? "az once" : "just now";
+            return "just now";
         if (timeAgo.TotalMinutes < 60)
-            return isTr ? $"{(int)timeAgo.TotalMinutes} dk once" : $"{(int)timeAgo.TotalMinutes} min ago";
-        return isTr ? $"{(int)timeAgo.TotalHours} saat once" : $"{(int)timeAgo.TotalHours} hours ago";
+            return $"{(int)timeAgo.TotalMinutes} min ago";
+        return $"{(int)timeAgo.TotalHours} hours ago";
     }
     
     private static string TruncateText(string text, int maxLength)

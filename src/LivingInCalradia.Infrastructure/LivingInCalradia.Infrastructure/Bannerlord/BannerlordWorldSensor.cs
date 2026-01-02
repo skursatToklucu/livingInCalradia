@@ -230,9 +230,9 @@ public sealed class BannerlordWorldSensor : IWorldSensor
             if (hero.CurrentSettlement != null)
             {
                 var settlement = hero.CurrentSettlement;
-                var settlementType = settlement.IsTown ? "Sehir" : 
-                                     settlement.IsCastle ? "Kale" : 
-                                     settlement.IsVillage ? "Koy" : "Yerlesim";
+                var settlementType = settlement.IsTown ? "City" : 
+                                     settlement.IsCastle ? "Castle" : 
+                                     settlement.IsVillage ? "Village" : "Settlement";
                 
                 return $"{settlement.Name} ({settlementType})";
             }
@@ -243,27 +243,27 @@ public sealed class BannerlordWorldSensor : IWorldSensor
                 
                 if (party.BesiegedSettlement != null)
                 {
-                    return $"{party.BesiegedSettlement.Name} Kusatmasi";
+                    return $"Siege of {party.BesiegedSettlement.Name}";
                 }
                 
                 if (party.TargetSettlement != null)
                 {
-                    return $"{party.TargetSettlement.Name}'e Yolda";
+                    return $"En route to {party.TargetSettlement.Name}";
                 }
                 
-                return "Seferde";
+                return "On campaign";
             }
             
             if (hero.HomeSettlement != null)
             {
-                return $"{hero.HomeSettlement.Name} (Ev)";
+                return $"{hero.HomeSettlement.Name} (Home)";
             }
             
             return "Calradia";
         }
         catch
         {
-            return "Bilinmeyen Konum";
+            return "Unknown Location";
         }
     }
     

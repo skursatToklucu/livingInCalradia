@@ -20,13 +20,12 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     private readonly string _model;
     private readonly double _temperature;
     private readonly AgentMemory _memory;
-    private readonly string _language;
     
     public GroqOrchestrator(
         string apiKey, 
         string model = "llama-3.1-8b-instant", 
         double temperature = 0.7,
-        string language = "tr")
+        string language = "en")
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentNullException(nameof(apiKey));
@@ -34,7 +33,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         _model = model;
         _temperature = temperature;
         _memory = new AgentMemory(maxMemoriesPerAgent: 5);
-        _language = language;
         
         _httpClient = new HttpClient
         {
@@ -73,12 +71,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         // Parse response manually
         var messageContent = ExtractContentFromResponse(responseJson);
         
-        // Sanitize Turkish characters if using Turkish
-        if (_language == "tr")
-        {
-            messageContent = SanitizeTurkishText(messageContent);
-        }
-        
         Console.WriteLine($"\n[AI RESPONSE]\n{messageContent}\n");
         
         // Parse action from response
@@ -91,29 +83,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         _memory.Remember(agentId, perception.Location, shortDecision, actionName);
         
         return decision;
-    }
-    
-    /// <summary>
-    /// Converts Turkish special characters to ASCII equivalents for Bannerlord font compatibility.
-    /// </summary>
-    private string SanitizeTurkishText(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-            return text;
-        
-        return text
-            .Replace('?', 'i')
-            .Replace('?', 'I')
-            .Replace('?', 's')
-            .Replace('?', 'S')
-            .Replace('?', 'g')
-            .Replace('?', 'G')
-            .Replace('ü', 'u')
-            .Replace('Ü', 'U')
-            .Replace('ö', 'o')
-            .Replace('Ö', 'O')
-            .Replace('ç', 'c')
-            .Replace('Ç', 'C');
     }
     
     private string BuildRequestJson(string systemPrompt, string userPrompt)
@@ -186,11 +155,10 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     private string ExtractShortDecision(string fullResponse)
     {
         // Extract the THOUGHT part for memory
-        var thoughtKey = _language == "tr" ? "DUSUNCE:" : "THOUGHT:";
         var lines = fullResponse.Split('\n');
         foreach (var line in lines)
         {
-            if (line.Trim().StartsWith(thoughtKey, StringComparison.OrdinalIgnoreCase))
+            if (line.Trim().StartsWith("THOUGHT:", StringComparison.OrdinalIgnoreCase))
             {
                 return line.Substring(line.IndexOf(':') + 1).Trim();
             }
@@ -205,45 +173,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     private string GetPersonalityPrompt(string agentId)
     {
         var agentLower = agentId.ToLowerInvariant();
-        
-        if (_language == "en")
-        {
-            return GetEnglishPersonalityPrompt(agentLower);
-        }
-        
-        return GetTurkishPersonalityPrompt(agentLower);
-    }
-    
-    private string GetTurkishPersonalityPrompt(string agentLower)
-    {
-        var basePrompt = "";
-        
-        if (agentLower.Contains("king") || agentLower.Contains("caladog"))
-        {
-            basePrompt = "Sen Battania Krali Caladog'sun. Guclu, onurlu ve savasci bir kralsin. Kararlarin halkin iyiligi ve kralliginin genislemesi icin olmali.";
-        }
-        else if (agentLower.Contains("merchant") || agentLower.Contains("trader"))
-        {
-            basePrompt = "Sen zengin bir tuccarsin. Para kazanmak ve ticaret agini genisletmek en buyuk onceligin.";
-        }
-        else if (agentLower.Contains("commander") || agentLower.Contains("general"))
-        {
-            basePrompt = "Sen deneyimli bir komutansin. Taktik dahisi bir generalsin. Askerlerinin hayati onemli ama zafer her seyden ustun.";
-        }
-        else if (agentLower.Contains("villager") || agentLower.Contains("peasant"))
-        {
-            basePrompt = "Sen bir koylusun. Hayat zor, vergiler agir. Aileni korumak ve hayatta kalmak icin mucadele ediyorsun.";
-        }
-        else
-        {
-            basePrompt = "Sen Mount & Blade II: Bannerlord dunyasinda yasayan bir karaktersin. Mantik yuruterek kararlar ver.";
-        }
-        
-        return basePrompt + " Onceki kararlarini goz onunde bulundur. Tutarli ol. ONEMLI: Turkce ozel karakterler KULLANMA (i, s, g, u, o, c kullan).";
-    }
-    
-    private string GetEnglishPersonalityPrompt(string agentLower)
-    {
         var basePrompt = "";
         
         if (agentLower.Contains("king") || agentLower.Contains("caladog"))
@@ -271,50 +200,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     }
     
     private string BuildUserPrompt(string agentId, WorldPerception perception, string memoryContext)
-    {
-        if (_language == "en")
-        {
-            return BuildEnglishUserPrompt(agentId, perception, memoryContext);
-        }
-        
-        return BuildTurkishUserPrompt(agentId, perception, memoryContext);
-    }
-    
-    private string BuildTurkishUserPrompt(string agentId, WorldPerception perception, string memoryContext)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("MEVCUT DURUM:");
-        sb.AppendLine($"Karakter: {agentId}");
-        sb.AppendLine($"Konum: {perception.Location}");
-        sb.AppendLine($"Zaman: {perception.Timestamp:yyyy-MM-dd HH:mm}");
-        sb.AppendLine($"Hava: {perception.Weather}");
-        sb.AppendLine();
-        sb.AppendLine("EKONOMI:");
-        sb.AppendLine($"Refah: {perception.Economy.Prosperity}");
-        sb.AppendLine($"Gida: {perception.Economy.FoodSupply}");
-        sb.AppendLine($"Vergi: %{perception.Economy.TaxRate}");
-        sb.AppendLine();
-        sb.AppendLine("ILISKILER:");
-        foreach (var rel in perception.Relations)
-        {
-            var status = rel.Value >= 50 ? "Muttefik" : rel.Value >= 0 ? "Notr" : rel.Value >= -50 ? "Gergin" : "Dusman";
-            sb.AppendLine($"  {rel.Key}: {rel.Value} ({status})");
-        }
-        sb.AppendLine();
-        sb.AppendLine("HAFIZA:");
-        sb.AppendLine(memoryContext);
-        sb.AppendLine();
-        sb.AppendLine("SORU: Bu durumda ne yapmalisin?");
-        sb.AppendLine();
-        sb.AppendLine("Format:");
-        sb.AppendLine("DUSUNCE: [Analiz]");
-        sb.AppendLine("AKSIYON: [Wait/MoveArmy/Trade/Attack/Defend/Recruit]");
-        sb.AppendLine("DETAY: [Detaylar]");
-        
-        return sb.ToString();
-    }
-    
-    private string BuildEnglishUserPrompt(string agentId, WorldPerception perception, string memoryContext)
     {
         var sb = new StringBuilder();
         sb.AppendLine("CURRENT SITUATION:");
@@ -360,8 +245,7 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         {
             var trimmed = line.Trim();
             
-            if (trimmed.StartsWith("AKSIYON:", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.StartsWith("ACTION:", StringComparison.OrdinalIgnoreCase))
+            if (trimmed.StartsWith("ACTION:", StringComparison.OrdinalIgnoreCase))
             {
                 actionType = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
                 
@@ -375,8 +259,7 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
                     actionType = actionType.Split(' ')[0].Trim();
                 }
             }
-            else if (trimmed.StartsWith("DETAY:", StringComparison.OrdinalIgnoreCase) ||
-                     trimmed.StartsWith("DETAIL:", StringComparison.OrdinalIgnoreCase))
+            else if (trimmed.StartsWith("DETAIL:", StringComparison.OrdinalIgnoreCase))
             {
                 detail = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
             }

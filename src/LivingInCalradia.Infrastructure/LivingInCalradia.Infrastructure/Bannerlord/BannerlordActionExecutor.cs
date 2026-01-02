@@ -84,13 +84,13 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             }
             catch (Exception ex)
             {
-                LogAction(action.ActionType, action.Parameters, $"HATA: {ex.Message}");
-                return Task.FromResult(ActionResult.Failed($"Aksiyon hatasi: {ex.Message}", ex));
+                LogAction(action.ActionType, action.Parameters, $"ERROR: {ex.Message}");
+                return Task.FromResult(ActionResult.Failed($"Action error: {ex.Message}", ex));
             }
         }
 
-        LogAction(action.ActionType, action.Parameters, "Bilinmeyen aksiyon");
-        return Task.FromResult(ActionResult.Failed($"Bilinmeyen aksiyon: {action.ActionType}"));
+        LogAction(action.ActionType, action.Parameters, "Unknown action");
+        return Task.FromResult(ActionResult.Failed($"Unknown action: {action.ActionType}"));
     }
     
     /// <summary>
@@ -101,12 +101,12 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
     {
         try
         {
-            ShowMessage("========== AI PROOF TEST BASLIYOR ==========", Colors.Magenta);
+            ShowMessage("========== AI PROOF TEST STARTING ==========", Colors.Magenta);
             
             var mainHero = Hero.MainHero;
             if (mainHero == null)
             {
-                ShowMessage("HATA: MainHero bulunamadi!", Colors.Red);
+                ShowMessage("ERROR: MainHero not found!", Colors.Red);
                 return;
             }
             
@@ -116,7 +116,7 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             
             if (targetHero == null)
             {
-                ShowMessage("HATA: Test icin lord bulunamadi!", Colors.Red);
+                ShowMessage("ERROR: No lord found for testing!", Colors.Red);
                 return;
             }
             
@@ -124,34 +124,34 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             var beforeRelation = CharacterRelationManager.GetHeroRelation(mainHero, targetHero);
             var beforeGold = mainHero.Gold;
             
-            ShowMessage($"[ONCE] {targetHero.Name} ile iliski: {beforeRelation}", Colors.Yellow);
-            ShowMessage($"[ONCE] Altin: {beforeGold}", Colors.Yellow);
+            ShowMessage($"[BEFORE] Relation with {targetHero.Name}: {beforeRelation}", Colors.Yellow);
+            ShowMessage($"[BEFORE] Gold: {beforeGold}", Colors.Yellow);
             
             // STEP 2: Execute a REAL action
-            ShowMessage($"[AKSIYON] {targetHero.Name} ile iliski +5 artiriliyor...", Colors.Cyan);
+            ShowMessage($"[ACTION] Increasing relation with {targetHero.Name} by +5...", Colors.Cyan);
             ChangeRelationAction.ApplyRelationChangeBetweenHeroes(mainHero, targetHero, 5);
             
             // STEP 3: Record AFTER state
             var afterRelation = CharacterRelationManager.GetHeroRelation(mainHero, targetHero);
             
-            ShowMessage($"[SONRA] {targetHero.Name} ile iliski: {afterRelation}", Colors.Green);
+            ShowMessage($"[AFTER] Relation with {targetHero.Name}: {afterRelation}", Colors.Green);
             
             // STEP 4: Verify change
             if (afterRelation == beforeRelation + 5)
             {
-                ShowMessage("BASARILI: Iliski degeri GERCEKTEN degisti!", Colors.Green);
-                ShowMessage($"  Degisim: {beforeRelation} -> {afterRelation} (+5)", Colors.Green);
+                ShowMessage("SUCCESS: Relation value ACTUALLY changed!", Colors.Green);
+                ShowMessage($"  Change: {beforeRelation} -> {afterRelation} (+5)", Colors.Green);
             }
             else
             {
-                ShowMessage($"UYARI: Beklenen {beforeRelation + 5}, gerceklesen {afterRelation}", Colors.Red);
+                ShowMessage($"WARNING: Expected {beforeRelation + 5}, got {afterRelation}", Colors.Red);
             }
             
-            ShowMessage("========== AI PROOF TEST TAMAMLANDI ==========", Colors.Magenta);
+            ShowMessage("========== AI PROOF TEST COMPLETED ==========", Colors.Magenta);
         }
         catch (Exception ex)
         {
-            ShowMessage($"HATA: {ex.Message}", Colors.Red);
+            ShowMessage($"ERROR: {ex.Message}", Colors.Red);
         }
     }
     
@@ -164,14 +164,14 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         {
             ShowMessage("", Colors.White);
             ShowMessage("==================================================", Colors.Magenta);
-            ShowMessage("     AI DUSUNCE -> AKSIYON PROOF OF CONCEPT        ", Colors.Magenta);
+            ShowMessage("     AI THOUGHT -> ACTION PROOF OF CONCEPT        ", Colors.Magenta);
             ShowMessage("==================================================", Colors.Magenta);
             ShowMessage("", Colors.White);
             
             var mainHero = Hero.MainHero;
             if (mainHero == null || Campaign.Current == null)
             {
-                ShowMessage("HATA: Oyun durumu gecersiz!", Colors.Red);
+                ShowMessage("ERROR: Invalid game state!", Colors.Red);
                 return;
             }
             
@@ -183,58 +183,58 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             
             if (lords == null || lords.Count == 0)
             {
-                ShowMessage("HATA: Test icin lord bulunamadi!", Colors.Red);
+                ShowMessage("ERROR: No lords found for testing!", Colors.Red);
                 return;
             }
             
-            ShowMessage($"Test Hedefleri: {string.Join(", ", lords.Select(l => l.Name))}", Colors.White);
+            ShowMessage($"Test Targets: {string.Join(", ", lords.Select(l => l.Name))}", Colors.White);
             ShowMessage("", Colors.White);
             
             // TEST 1: Relation Change
             var lord1 = lords[0];
             var beforeRel = CharacterRelationManager.GetHeroRelation(mainHero, lord1);
-            ShowMessage($"[TEST 1] Iliski Degisikligi", Colors.Cyan);
-            ShowMessage($"  Hedef: {lord1.Name}", Colors.White);
-            ShowMessage($"  ONCE: {beforeRel}", Colors.Yellow);
+            ShowMessage($"[TEST 1] Relation Change", Colors.Cyan);
+            ShowMessage($"  Target: {lord1.Name}", Colors.White);
+            ShowMessage($"  BEFORE: {beforeRel}", Colors.Yellow);
             
             ChangeRelationAction.ApplyRelationChangeBetweenHeroes(mainHero, lord1, 10);
             
             var afterRel = CharacterRelationManager.GetHeroRelation(mainHero, lord1);
-            ShowMessage($"  SONRA: {afterRel}", Colors.Green);
-            ShowMessage($"  Degisim: {afterRel - beforeRel:+0;-0}", afterRel > beforeRel ? Colors.Green : Colors.Red);
+            ShowMessage($"  AFTER: {afterRel}", Colors.Green);
+            ShowMessage($"  Change: {afterRel - beforeRel:+0;-0}", afterRel > beforeRel ? Colors.Green : Colors.Red);
             ShowMessage("", Colors.White);
             
             // TEST 2: Gold Check (just display, don't modify)
-            ShowMessage($"[TEST 2] Oyuncu Durumu", Colors.Cyan);
-            ShowMessage($"  Altin: {mainHero.Gold:N0}", Colors.Yellow);
-            var settlementName = mainHero.CurrentSettlement?.Name?.ToString() ?? "Haritada";
-            var partyName = mainHero.PartyBelongedTo?.Name?.ToString() ?? "Yok";
-            ShowMessage($"  Konum: {settlementName}", Colors.Yellow);
-            ShowMessage($"  Parti: {partyName}", Colors.Yellow);
+            ShowMessage($"[TEST 2] Player Status", Colors.Cyan);
+            ShowMessage($"  Gold: {mainHero.Gold:N0}", Colors.Yellow);
+            var settlementName = mainHero.CurrentSettlement?.Name?.ToString() ?? "On the map";
+            var partyName = mainHero.PartyBelongedTo?.Name?.ToString() ?? "None";
+            ShowMessage($"  Location: {settlementName}", Colors.Yellow);
+            ShowMessage($"  Party: {partyName}", Colors.Yellow);
             ShowMessage("", Colors.White);
             
             // TEST 3: World State
-            ShowMessage($"[TEST 3] Dunya Durumu", Colors.Cyan);
+            ShowMessage($"[TEST 3] World State", Colors.Cyan);
             var kingdoms = Campaign.Current.Kingdoms?.Where(k => !k.IsEliminated).ToList();
             if (kingdoms != null)
             {
                 foreach (var kingdom in kingdoms.Take(5))
                 {
                     var warCount = kingdoms.Count(k => k != kingdom && kingdom.IsAtWarWith(k));
-                    ShowMessage($"  {kingdom.Name}: {warCount} savas", Colors.White);
+                    ShowMessage($"  {kingdom.Name}: {warCount} wars", Colors.White);
                 }
             }
             ShowMessage("", Colors.White);
             
             ShowMessage("==================================================", Colors.Green);
-            ShowMessage("  TUM TESTLER TAMAMLANDI - SISTEM CALISIYOR!      ", Colors.Green);
+            ShowMessage("  ALL TESTS COMPLETED - SYSTEM IS WORKING!        ", Colors.Green);
             ShowMessage("==================================================", Colors.Green);
             ShowMessage("", Colors.White);
-            ShowMessage("AI dusuncesi -> Gercek oyun aksiyonu baglantisi KANITLANDI", Colors.Green);
+            ShowMessage("AI thought -> Real game action connection PROVEN", Colors.Green);
         }
         catch (Exception ex)
         {
-            ShowMessage($"TEST HATASI: {ex.Message}", Colors.Red);
+            ShowMessage($"TEST ERROR: {ex.Message}", Colors.Red);
             Debug.Print($"[LivingInCalradia] Full test error: {ex}");
         }
     }
@@ -246,15 +246,15 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         action.Parameters.TryGetValue("duration", out var dur);
         var duration = Convert.ToInt32(dur ?? 60);
         
-        ShowMessage($"Bekleniyor ({duration}s)", Colors.Gray);
-        return ActionResult.Successful($"Agent {duration} saniye bekledi");
+        ShowMessage($"Waiting ({duration}s)", Colors.Gray);
+        return ActionResult.Successful($"Agent waited {duration} seconds");
     }
     
     private ActionResult HandleTestProof(AgentAction action, string agentId)
     {
         // This is a special action that proves the system works
         RunProofTest();
-        return ActionResult.Successful("Proof test tamamlandi");
+        return ActionResult.Successful("Proof test completed");
     }
 
     private ActionResult HandleChangeRelation(AgentAction action, string agentId)
@@ -280,11 +280,11 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             // Record AFTER state for proof
             var afterRelation = CharacterRelationManager.GetHeroRelation(actingHero, targetHero);
             
-            ShowMessage($"Iliski: {actingHero.Name} <-> {targetHero.Name}", Colors.Cyan);
+            ShowMessage($"Relation: {actingHero.Name} <-> {targetHero.Name}", Colors.Cyan);
             ShowMessage($"  {beforeRelation} -> {afterRelation} ({amount:+0;-0})", 
                 amount > 0 ? Colors.Green : Colors.Red);
             
-            return ActionResult.Successful($"Iliski degisti: {beforeRelation} -> {afterRelation}");
+            return ActionResult.Successful($"Relation changed: {beforeRelation} -> {afterRelation}");
         }
 
         // Fallback: Try with MainHero
@@ -294,11 +294,11 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             ChangeRelationAction.ApplyRelationChangeBetweenHeroes(Hero.MainHero, targetHero, amount);
             var afterRelation = CharacterRelationManager.GetHeroRelation(Hero.MainHero, targetHero);
             
-            ShowMessage($"Oyuncu <-> {targetHero.Name}: {beforeRelation} -> {afterRelation}", Colors.Green);
-            return ActionResult.Successful($"Iliski degistirildi: {beforeRelation} -> {afterRelation}");
+            ShowMessage($"Player <-> {targetHero.Name}: {beforeRelation} -> {afterRelation}", Colors.Green);
+            return ActionResult.Successful($"Relation changed: {beforeRelation} -> {afterRelation}");
         }
 
-        return ActionResult.Failed("Hedef kahraman bulunamadi");
+        return ActionResult.Failed("Target hero not found");
     }
 
     private ActionResult HandleDeclareWar(AgentAction action, string agentId)
@@ -325,20 +325,20 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 // Verify AFTER state
                 var isAtWarNow = actingKingdom.IsAtWarWith(targetKingdom);
                 
-                ShowMessage($"SAVAS ILAN EDILDI!", Colors.Red);
+                ShowMessage($"WAR DECLARED!", Colors.Red);
                 ShowMessage($"  {actingKingdom.Name} -> {targetKingdom.Name}", Colors.Red);
-                ShowMessage($"  Durum: {(isAtWarNow ? "SAVASTA" : "HATA")}", isAtWarNow ? Colors.Red : Colors.Yellow);
+                ShowMessage($"  Status: {(isAtWarNow ? "AT WAR" : "ERROR")}", isAtWarNow ? Colors.Red : Colors.Yellow);
                 
-                return ActionResult.Successful($"Savas ilan edildi! Onceki: Baris, Simdi: {(isAtWarNow ? "Savas" : "Hata")}");
+                return ActionResult.Successful($"War declared! Before: Peace, Now: {(isAtWarNow ? "War" : "Error")}");
             }
             else
             {
-                return ActionResult.Failed($"Zaten {targetKingdom.Name} ile savastayiz");
+                return ActionResult.Failed($"Already at war with {targetKingdom.Name}");
             }
         }
 
-        ShowMessage($"Savas ilani: {detail}", Colors.Yellow);
-        return ActionResult.Successful("Savas ilani niyeti kaydedildi");
+        ShowMessage($"War declaration: {detail}", Colors.Yellow);
+        return ActionResult.Successful("War declaration intent recorded");
     }
 
     private ActionResult HandleMakePeace(AgentAction action, string agentId)
@@ -363,20 +363,20 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 
                 var isAtWarNow = actingKingdom.IsAtWarWith(targetKingdom);
                 
-                ShowMessage($"BARIS YAPILDI!", Colors.Green);
+                ShowMessage($"PEACE MADE!", Colors.Green);
                 ShowMessage($"  {actingKingdom.Name} <-> {targetKingdom.Name}", Colors.Green);
-                ShowMessage($"  Durum: {(isAtWarNow ? "HATA" : "BARIS")}", isAtWarNow ? Colors.Red : Colors.Green);
+                ShowMessage($"  Status: {(isAtWarNow ? "ERROR" : "PEACE")}", isAtWarNow ? Colors.Red : Colors.Green);
                 
-                return ActionResult.Successful($"Baris yapildi! Onceki: Savas, Simdi: {(isAtWarNow ? "Hata" : "Baris")}");
+                return ActionResult.Successful($"Peace made! Before: War, Now: {(isAtWarNow ? "Error" : "Peace")}");
             }
             else
             {
-                return ActionResult.Failed($"{targetKingdom.Name} ile zaten savasta degiliz");
+                return ActionResult.Failed($"Not at war with {targetKingdom.Name}");
             }
         }
 
-        ShowMessage($"Baris basarisiz: {detail}", Colors.Yellow);
-        return ActionResult.Failed("Baris yapilamadi - krallik bulunamadi");
+        ShowMessage($"Peace failed: {detail}", Colors.Yellow);
+        return ActionResult.Failed("Peace failed - kingdom not found");
     }
 
     private ActionResult HandleGiveGold(AgentAction action, string agentId)
@@ -404,19 +404,19 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 var afterGoldGiver = actingHero.Gold;
                 var afterGoldReceiver = receiverHero.Gold;
                 
-                ShowMessage($"ALTIN TRANSFERI", Colors.Yellow);
+                ShowMessage($"GOLD TRANSFER", Colors.Yellow);
                 ShowMessage($"  {actingHero.Name}: {beforeGoldGiver} -> {afterGoldGiver}", Colors.Yellow);
                 ShowMessage($"  {receiverHero.Name}: {beforeGoldReceiver} -> {afterGoldReceiver}", Colors.Yellow);
                 
-                return ActionResult.Successful($"Altin transfer edildi: {amount}");
+                return ActionResult.Successful($"Gold transferred: {amount}");
             }
             else
             {
-                return ActionResult.Failed($"Yetersiz altin: {actingHero.Gold} < {amount}");
+                return ActionResult.Failed($"Insufficient gold: {actingHero.Gold} < {amount}");
             }
         }
 
-        return ActionResult.Failed("Altin transferi basarisiz");
+        return ActionResult.Failed("Gold transfer failed");
     }
 
     private ActionResult HandleTrade(AgentAction action, string agentId)
@@ -428,12 +428,12 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         if (settlement?.Town != null)
         {
-            ShowMessage($"TICARET: {actingHero?.Name} @ {settlement.Name}", Colors.Yellow);
-            return ActionResult.Successful($"{actingHero?.Name} {settlement.Name}'de ticaret gerceklestirdi");
+            ShowMessage($"TRADE: {actingHero?.Name} @ {settlement.Name}", Colors.Yellow);
+            return ActionResult.Successful($"{actingHero?.Name} traded at {settlement.Name}");
         }
 
-        ShowMessage($"Ticaret: {detail}", Colors.Yellow);
-        return ActionResult.Successful("Ticaret simule edildi");
+        ShowMessage($"Trade: {detail}", Colors.Yellow);
+        return ActionResult.Successful("Trade simulated");
     }
 
     private ActionResult HandleMoveArmy(AgentAction action, string agentId)
@@ -452,20 +452,20 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             // REAL ACTION: Set target settlement for the party
             SetPartyTargetSettlement(party, targetSettlement);
             
-            ShowMessage($"ORDU HAREKETI", Colors.Cyan);
+            ShowMessage($"ARMY MOVEMENT", Colors.Cyan);
             ShowMessage($"  {party.Name} -> {targetSettlement.Name}", Colors.Cyan);
-            ShowMessage($"  Hedef belirlendi, hareket basladi", Colors.Green);
+            ShowMessage($"  Target set, movement started", Colors.Green);
             
             return ActionResult.Successful($"{party.Name} -> {targetSettlement.Name}");
         }
 
         if (targetSettlement != null)
         {
-            ShowMessage($"Hedef: {targetSettlement.Name}", Colors.Cyan);
-            return ActionResult.Successful($"Ordu {targetSettlement.Name}'e yonlendirildi");
+            ShowMessage($"Target: {targetSettlement.Name}", Colors.Cyan);
+            return ActionResult.Successful($"Army directed to {targetSettlement.Name}");
         }
 
-        return ActionResult.Failed($"Hedef konum bulunamadi: {targetName}");
+        return ActionResult.Failed($"Target location not found: {targetName}");
     }
 
     private ActionResult HandleRecruitTroops(AgentAction action, string agentId)
@@ -502,14 +502,14 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
             if (recruited > 0)
             {
-                ShowMessage($"ASKER TOPLANDI", Colors.Magenta);
-                ShowMessage($"  Parti: {beforeCount} -> {afterCount} (+{recruited})", Colors.Magenta);
-                return ActionResult.Successful($"Asker toplandi: {beforeCount} -> {afterCount}");
+                ShowMessage($"TROOPS RECRUITED", Colors.Magenta);
+                ShowMessage($"  Party: {beforeCount} -> {afterCount} (+{recruited})", Colors.Magenta);
+                return ActionResult.Successful($"Troops recruited: {beforeCount} -> {afterCount}");
             }
         }
 
-        ShowMessage($"Asker toplama: {count} (simule)", Colors.Magenta);
-        return ActionResult.Successful($"{count} asker toplanmasi simule edildi");
+        ShowMessage($"Recruit troops: {count} (simulated)", Colors.Magenta);
+        return ActionResult.Successful($"{count} troops recruitment simulated");
     }
 
     private ActionResult HandleStartSiege(AgentAction action, string agentId)
@@ -535,18 +535,18 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 // REAL ACTION: Start siege
                 SetPartyBesiegeSettlement(party, targetSettlement);
                 
-                ShowMessage($"KUSATMA BASLADI", Colors.Red);
+                ShowMessage($"SIEGE STARTED", Colors.Red);
                 ShowMessage($"  {party.Name} -> {targetSettlement.Name}", Colors.Red);
-                return ActionResult.Successful($"{targetSettlement.Name} kusatmasi baslatildi!");
+                return ActionResult.Successful($"Siege of {targetSettlement.Name} started!");
             }
             else
             {
-                return ActionResult.Failed($"{targetSettlement.Name} dusman degil, kusatilamaz");
+                return ActionResult.Failed($"{targetSettlement.Name} is not hostile, cannot besiege");
             }
         }
 
-        ShowMessage($"Kusatma hedefi: {targetName}", Colors.Red);
-        return ActionResult.Failed($"Kusatma baslatilamadi: {targetName}");
+        ShowMessage($"Siege target: {targetName}", Colors.Red);
+        return ActionResult.Failed($"Could not start siege: {targetName}");
     }
 
     private ActionResult HandleAttack(AgentAction action, string agentId)
@@ -568,14 +568,14 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 // REAL ACTION: Set to engage enemy
                 SetPartyEngageParty(party, enemyParty);
                 
-                ShowMessage($"SALDIRI", Colors.Red);
+                ShowMessage($"ATTACK", Colors.Red);
                 ShowMessage($"  {party.Name} -> {enemyParty.Name}", Colors.Red);
                 return ActionResult.Successful($"{party.Name} -> {enemyParty.Name}");
             }
         }
 
-        ShowMessage($"Saldiri emri verildi: {detail}", Colors.Red);
-        return ActionResult.Successful("Saldiri emri verildi");
+        ShowMessage($"Attack order given: {detail}", Colors.Red);
+        return ActionResult.Successful("Attack order given");
     }
 
     private ActionResult HandleRetreat(AgentAction action, string agentId)
@@ -593,14 +593,14 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             {
                 SetPartyTargetSettlement(party, friendlySettlement);
                 
-                ShowMessage($"GERI CEKILME", Colors.Yellow);
+                ShowMessage($"RETREAT", Colors.Yellow);
                 ShowMessage($"  {party.Name} -> {friendlySettlement.Name}", Colors.Yellow);
                 return ActionResult.Successful($"{party.Name} -> {friendlySettlement.Name}");
             }
         }
 
-        ShowMessage($"Geri cekilme: {detail}", Colors.Yellow);
-        return ActionResult.Successful("Geri cekilme emri verildi");
+        ShowMessage($"Retreat: {detail}", Colors.Yellow);
+        return ActionResult.Successful("Retreat order given");
     }
 
     private ActionResult HandleDefend(AgentAction action, string agentId)
@@ -618,13 +618,13 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         {
             SetPartyTargetSettlement(party, settlement);
             
-            ShowMessage($"SAVUNMA", Colors.Blue);
+            ShowMessage($"DEFEND", Colors.Blue);
             ShowMessage($"  {party.Name} -> {settlement.Name}", Colors.Blue);
             return ActionResult.Successful($"{party.Name} -> {settlement.Name}");
         }
 
-        ShowMessage($"Savunma pozisyonu: {detail}", Colors.Blue);
-        return ActionResult.Successful("Savunma pozisyonu alindi");
+        ShowMessage($"Defensive position: {detail}", Colors.Blue);
+        return ActionResult.Successful("Defensive position taken");
     }
 
     private ActionResult HandlePatrol(AgentAction action, string agentId)
@@ -642,13 +642,13 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         {
             SetPartyPatrolAroundSettlement(party, settlement);
             
-            ShowMessage($"DEVRIYE", Colors.Cyan);
+            ShowMessage($"PATROL", Colors.Cyan);
             ShowMessage($"  {party.Name} <> {settlement.Name}", Colors.Cyan);
             return ActionResult.Successful($"{party.Name} <> {settlement.Name}");
         }
 
-        ShowMessage($"Devriye: {detail}", Colors.Cyan);
-        return ActionResult.Successful("Devriye gorevi basladi");
+        ShowMessage($"Patrol: {detail}", Colors.Cyan);
+        return ActionResult.Successful("Patrol duty started");
     }
 
     private ActionResult HandleTalk(AgentAction action, string agentId)
@@ -666,12 +666,12 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             ChangeRelationAction.ApplyRelationChangeBetweenHeroes(actingHero, targetHero, 1);
             var afterRel = CharacterRelationManager.GetHeroRelation(actingHero, targetHero);
             
-            ShowMessage($"KONUSMA: {actingHero.Name} <-> {targetHero.Name}", Colors.White);
-            ShowMessage($"  Iliski: {beforeRel} -> {afterRel}", Colors.Green);
-            return ActionResult.Successful($"Konusma: {beforeRel} -> {afterRel}");
+            ShowMessage($"CONVERSATION: {actingHero.Name} <-> {targetHero.Name}", Colors.White);
+            ShowMessage($"  Relation: {beforeRel} -> {afterRel}", Colors.Green);
+            return ActionResult.Successful($"Conversation: {beforeRel} -> {afterRel}");
         }
 
-        return ActionResult.Successful("Konusma gerceklesti");
+        return ActionResult.Successful("Conversation happened");
     }
 
     private ActionResult HandleWork(AgentAction action, string agentId)
@@ -687,12 +687,12 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             settlement.Village.Hearth += 0.1f;
             var afterHearth = settlement.Village.Hearth;
             
-            ShowMessage($"CALISMA: {settlement.Name}", Colors.Green);
-            ShowMessage($"  Ocak: {beforeHearth:F1} -> {afterHearth:F1}", Colors.Green);
-            return ActionResult.Successful($"Calisma: {beforeHearth:F1} -> {afterHearth:F1}");
+            ShowMessage($"WORK: {settlement.Name}", Colors.Green);
+            ShowMessage($"  Hearth: {beforeHearth:F1} -> {afterHearth:F1}", Colors.Green);
+            return ActionResult.Successful($"Work: {beforeHearth:F1} -> {afterHearth:F1}");
         }
 
-        return ActionResult.Successful("Calisma tamamlandi");
+        return ActionResult.Successful("Work completed");
     }
 
     private ActionResult HandleHide(AgentAction action, string agentId)
@@ -706,11 +706,11 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         {
             SetPartyPassive(party);
             
-            ShowMessage($"GIZLENME: {party.Name}", Colors.Gray);
-            return ActionResult.Successful($"{party.Name} gizleniyor");
+            ShowMessage($"HIDING: {party.Name}", Colors.Gray);
+            return ActionResult.Successful($"{party.Name} is hiding");
         }
 
-        return ActionResult.Successful("Gizlendi");
+        return ActionResult.Successful("Hidden");
     }
 
     #endregion

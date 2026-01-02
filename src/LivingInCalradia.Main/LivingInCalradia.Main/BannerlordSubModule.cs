@@ -31,7 +31,6 @@ public class BannerlordSubModule : MBSubModuleBase
     private BannerlordWorldSensor? _worldSensor;
     private BannerlordActionExecutor? _actionExecutor;
     private bool _isInitialized;
-    private string _effectiveLanguage = "en";
     
     // Tick timing control
     private float _lastTickTime;
@@ -48,23 +47,6 @@ public class BannerlordSubModule : MBSubModuleBase
         
         try
         {
-            // Pre-load config to get language for early messages
-            try
-            {
-                var config = AIConfiguration.Load();
-                if (config.IsAuto)
-                {
-                    var gameLanguage = DetectGameLanguage();
-                    config.SetGameLanguage(gameLanguage);
-                }
-                _effectiveLanguage = config.EffectiveLanguage;
-                LocalizedStrings.SetLanguage(_effectiveLanguage);
-            }
-            catch
-            {
-                LocalizedStrings.SetLanguage("en");
-            }
-            
             Log(LocalizedStrings.ModLoading);
             
             // Initialize Harmony for patching if needed
@@ -196,42 +178,42 @@ public class BannerlordSubModule : MBSubModuleBase
             
             var stateTypeName = activeState.GetType().Name;
             
-            // SADECE MapState'de calis - diger tum state'lerde durdur
-            // MissionState = Savas
+            // Only work in MapState - stop in all other states
+            // MissionState = Battle
             // MenuGameState = Menu
-            // MapState = Harita (AI calismali)
+            // MapState = Map (AI should work)
             
-            // Savas kontrolu - MissionState varsa durdur
+            // Battle check - stop if MissionState
             if (stateTypeName.Contains("Mission"))
             {
-                return true; // Savasta - AI durmali
+                return true; // In battle - AI should stop
             }
             
-            // Menu kontrolu
+            // Menu check
             if (stateTypeName.Contains("Menu"))
             {
-                return true; // Menude - AI durmali
+                return true; // In menu - AI should stop
             }
             
-            // Diyalog/Konusma kontrolu
+            // Dialogue/Conversation check
             if (stateTypeName.Contains("Conversation") || stateTypeName.Contains("Dialog"))
             {
-                return true; // Diyalogda - AI durmali
+                return true; // In dialogue - AI should stop
             }
             
-            // Encounter (karsilasma) kontrolu
+            // Encounter check
             if (stateTypeName.Contains("Encounter"))
             {
-                return true; // Karsilasmada - AI durmali
+                return true; // In encounter - AI should stop
             }
             
-            // Kusatma ekrani kontrolu
+            // Siege screen check
             if (stateTypeName.Contains("Siege"))
             {
-                return true; // Kusatma ekraninda - AI durmali
+                return true; // In siege screen - AI should stop
             }
             
-            // MapState degilse durdur (guvenli taraf)
+            // If not MapState, stop (safe side)
             if (!stateTypeName.Contains("Map"))
             {
                 return true;
@@ -241,7 +223,7 @@ public class BannerlordSubModule : MBSubModuleBase
         }
         catch
         {
-            return true; // Hata durumunda guvenli tarafta kal
+            return true; // In case of error, stay on safe side
         }
     }
     
@@ -259,20 +241,20 @@ public class BannerlordSubModule : MBSubModuleBase
                 BannerlordActionExecutor.RunFullAIProofTest();
             }
             
-            // NumPad2 = Tek lord icin AI dusunme
+            // NumPad2 = Single lord AI thinking
             if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad2))
             {
                 TriggerSingleLordThinking();
             }
             
-            // NumPad3 = Hizli test
+            // NumPad3 = Quick test
             if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad3))
             {
                 Log(LocalizedStrings.QuickTestStarting);
                 BannerlordActionExecutor.RunProofTest();
             }
             
-            // NumPad5 = Lord dusunceleri paneli
+            // NumPad5 = Lord thoughts panel
             if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad5))
             {
                 LordThoughtsPanel.ShowRecentThoughts();
@@ -300,7 +282,7 @@ public class BannerlordSubModule : MBSubModuleBase
             if (mainHero == null || Campaign.Current?.AliveHeroes == null)
                 return;
             
-            // Rastgele bir lord sec
+            // Select a random lord
             Hero? selectedLord = null;
             foreach (var hero in Campaign.Current.AliveHeroes)
             {
@@ -322,7 +304,7 @@ public class BannerlordSubModule : MBSubModuleBase
             // Show thinking notification
             LordThoughtsPanel.ShowThinkingNotification(selectedLord.Name.ToString());
             
-            // Async olarak calistir
+            // Run async
             var lord = selectedLord; // Capture for closure
             Task.Run(async () =>
             {
@@ -330,7 +312,7 @@ public class BannerlordSubModule : MBSubModuleBase
                 {
                     var result = await _workflowService.ExecuteWorkflowAsync(agentId);
                     
-                    // Async islem bittikten sonra pause kontrolu
+                    // Check pause after async operation
                     if (IsGamePaused())
                     {
                         Log(LocalizedStrings.GamePausedAIResultHidden);
@@ -393,23 +375,12 @@ public class BannerlordSubModule : MBSubModuleBase
             var config = AIConfiguration.Load();
             config.Validate();
             
-            // Auto-detect game language if set to "auto"
-            if (config.IsAuto)
-            {
-                var gameLanguage = DetectGameLanguage();
-                config.SetGameLanguage(gameLanguage);
-                Log(LocalizedStrings.LanguageDetected(gameLanguage, config.EffectiveLanguage));
-            }
-            
-            _effectiveLanguage = config.EffectiveLanguage;
-            LocalizedStrings.SetLanguage(_effectiveLanguage);
-            
-            Log($"Provider: {config.Provider}, Model: {config.ModelId}, Language: {config.EffectiveLanguage}");
+            Log($"Provider: {config.Provider}, Model: {config.ModelId}");
             
             // Create orchestrator based on provider
             if (config.IsGroq)
             {
-                _orchestrator = new GroqOrchestrator(config.ApiKey, config.ModelId, config.Temperature, config.EffectiveLanguage);
+                _orchestrator = new GroqOrchestrator(config.ApiKey, config.ModelId, config.Temperature, "en");
                 Log("GroqOrchestrator (direct API)");
             }
             else
@@ -435,9 +406,8 @@ public class BannerlordSubModule : MBSubModuleBase
             Log("Hotkeys: NumPad1=FullTest, NumPad2=AI, NumPad3=QuickTest, NumPad5=Thoughts");
             
             // Display in-game message
-            var langText = config.IsTurkish ? "Turkce" : "English";
             InformationManager.DisplayMessage(new InformationMessage(
-                LocalizedStrings.ModActiveMessage(langText),
+                LocalizedStrings.ModActiveMessage("English"),
                 Colors.Green));
         }
         catch (Exception ex)
@@ -447,45 +417,6 @@ public class BannerlordSubModule : MBSubModuleBase
                 $"LivingInCalradia {LocalizedStrings.Error}: {ex.Message}",
                 Colors.Red));
         }
-    }
-    
-    /// <summary>
-    /// Detects the current game language from Bannerlord settings.
-    /// </summary>
-    private string DetectGameLanguage()
-    {
-        try
-        {
-            var activeTextLanguage = MBTextManager.ActiveTextLanguage;
-            if (!string.IsNullOrEmpty(activeTextLanguage))
-                return activeTextLanguage;
-        }
-        catch { }
-        
-        try
-        {
-            var testText = GameTexts.FindText("str_menu_return_to_campaign_map")?.ToString() ?? "";
-            
-            if (testText.Contains("Kampanya") || testText.Contains("harita"))
-                return "Turkish";
-            if (testText.Contains("Karte") || testText.Contains("Kampagne"))
-                return "German";
-            if (testText.Contains("carte") || testText.Contains("campagne"))
-                return "French";
-            if (testText.Contains("mapa"))
-                return "Spanish";
-        }
-        catch { }
-        
-        try
-        {
-            var culture = System.Globalization.CultureInfo.CurrentUICulture;
-            if (culture.Name.StartsWith("tr", StringComparison.OrdinalIgnoreCase))
-                return "Turkish";
-        }
-        catch { }
-        
-        return "English";
     }
     
     /// <summary>
@@ -512,7 +443,7 @@ public class BannerlordSubModule : MBSubModuleBase
             
             foreach (var hero in nearbyHeroes)
             {
-                // Her hero islemeden once pause kontrolu
+                // Check pause before each hero
                 if (IsGamePaused())
                 {
                     Log(LocalizedStrings.GamePausedLoopStopped);
@@ -529,7 +460,7 @@ public class BannerlordSubModule : MBSubModuleBase
                 
                 var result = await _workflowService.ExecuteWorkflowAsync(agentId);
                 
-                // Async islem sonrasi tekrar kontrol
+                // Check again after async operation
                 if (IsGamePaused())
                 {
                     Log(LocalizedStrings.GamePausedResultNotShown);
@@ -593,9 +524,7 @@ public class BannerlordSubModule : MBSubModuleBase
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            // Support both Turkish and English
-            if (trimmed.StartsWith("DUSUNCE:", StringComparison.OrdinalIgnoreCase) ||
-                trimmed.StartsWith("THOUGHT:", StringComparison.OrdinalIgnoreCase))
+            if (trimmed.StartsWith("THOUGHT:", StringComparison.OrdinalIgnoreCase))
             {
                 var thought = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
                 if (thought.Length > 150)

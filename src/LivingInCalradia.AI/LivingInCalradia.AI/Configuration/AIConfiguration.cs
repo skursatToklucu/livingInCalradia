@@ -17,82 +17,11 @@ public sealed class AIConfiguration
     public double Temperature { get; set; } = 0.7;
     public int MaxTokens { get; set; } = 500;
     
-    /// <summary>
-    /// Language for AI responses. Options: "auto" (detect from game), "tr" (Turkish), "en" (English)
-    /// </summary>
-    public string Language { get; set; } = "auto";
-    
-    // Runtime resolved language (after auto-detection)
-    private string? _resolvedLanguage;
-    
     // Backward compatibility
     public string OpenAIApiKey 
     { 
         get => ApiKey; 
         set => ApiKey = value; 
-    }
-    
-    /// <summary>
-    /// Gets the effective language (resolves "auto" to actual language).
-    /// Call SetGameLanguage() first if using "auto".
-    /// </summary>
-    public string EffectiveLanguage => _resolvedLanguage ?? (IsAuto ? "en" : Language);
-    
-    /// <summary>
-    /// Check if language is set to auto-detect.
-    /// </summary>
-    public bool IsAuto => Language?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
-    
-    /// <summary>
-    /// Check if using Turkish language.
-    /// </summary>
-    public bool IsTurkish => EffectiveLanguage.Equals("tr", StringComparison.OrdinalIgnoreCase);
-    
-    /// <summary>
-    /// Check if using English language.
-    /// </summary>
-    public bool IsEnglish => EffectiveLanguage.Equals("en", StringComparison.OrdinalIgnoreCase);
-    
-    /// <summary>
-    /// Sets the resolved language from game detection.
-    /// </summary>
-    public void SetGameLanguage(string gameLanguage)
-    {
-        if (IsAuto && !string.IsNullOrWhiteSpace(gameLanguage))
-        {
-            _resolvedLanguage = MapGameLanguage(gameLanguage);
-        }
-    }
-    
-    /// <summary>
-    /// Maps game language code to our supported languages.
-    /// </summary>
-    private string MapGameLanguage(string gameLanguage)
-    {
-        var lang = gameLanguage.ToLowerInvariant();
-        
-        // Turkish variants
-        if (lang.Contains("turkish") || lang.Contains("türkçe") || lang == "tr" || lang == "tr-tr")
-            return "tr";
-        
-        // English variants (default fallback)
-        if (lang.Contains("english") || lang == "en" || lang == "en-us" || lang == "en-gb")
-            return "en";
-        
-        // German
-        if (lang.Contains("german") || lang.Contains("deutsch") || lang == "de")
-            return "en"; // Fallback to English for now
-        
-        // French
-        if (lang.Contains("french") || lang.Contains("français") || lang == "fr")
-            return "en"; // Fallback to English for now
-        
-        // Spanish
-        if (lang.Contains("spanish") || lang.Contains("español") || lang == "es")
-            return "en"; // Fallback to English for now
-        
-        // Default to English
-        return "en";
     }
 
     /// <summary>
@@ -140,7 +69,7 @@ public sealed class AIConfiguration
                     
                     if (config != null && !string.IsNullOrWhiteSpace(config.ApiKey))
                     {
-                        Console.WriteLine($"[Config] Loaded successfully. Provider: {config.Provider}, Language: {config.Language}");
+                        Console.WriteLine($"[Config] Loaded successfully. Provider: {config.Provider}");
                         return config;
                     }
                 }
@@ -171,7 +100,6 @@ public sealed class AIConfiguration
             config.Provider = ExtractJsonValue(json, "Provider") ?? "Groq";
             config.ModelId = ExtractJsonValue(json, "ModelId") ?? "llama-3.1-8b-instant";
             config.OrganizationId = ExtractJsonValue(json, "OrganizationId");
-            config.Language = ExtractJsonValue(json, "Language") ?? "auto";
             
             var tempStr = ExtractJsonValue(json, "Temperature");
             if (double.TryParse(tempStr, System.Globalization.NumberStyles.Any, 

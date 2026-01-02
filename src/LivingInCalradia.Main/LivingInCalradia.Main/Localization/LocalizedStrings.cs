@@ -2,86 +2,70 @@ namespace LivingInCalradia.Main.Localization;
 
 /// <summary>
 /// Localized strings for the mod UI and logs.
-/// Supports Turkish (tr) and English (en).
+/// English only.
 /// </summary>
 public static class LocalizedStrings
 {
-    private static string _language = "en";
-    
     /// <summary>
-    /// Sets the current language. Call this once during initialization.
+    /// Sets the current language. Always English.
     /// </summary>
     public static void SetLanguage(string language)
     {
-        _language = language?.ToLowerInvariant() == "tr" ? "tr" : "en";
+        // English only - no-op
     }
     
-    public static bool IsTurkish => _language == "tr";
+    public static bool IsTurkish => false;
     
     // Mod loading messages
-    public static string ModLoading => IsTurkish ? "Mod yukleniyor..." : "Mod loading...";
-    public static string ModLoaded => IsTurkish ? "Mod basariyla yuklendi!" : "Mod loaded successfully!";
-    public static string ModUnloaded => IsTurkish ? "Mod kaldirildi." : "Mod unloaded.";
-    public static string ModLoadError => IsTurkish ? "Mod yuklenirken hata" : "Error loading mod";
-    public static string ModUnloadError => IsTurkish ? "Mod kaldirilirken hata" : "Error unloading mod";
+    public static string ModLoading => "Mod loading...";
+    public static string ModLoaded => "Mod loaded successfully!";
+    public static string ModUnloaded => "Mod unloaded.";
+    public static string ModLoadError => "Error loading mod";
+    public static string ModUnloadError => "Error unloading mod";
     
     // Campaign messages
-    public static string CampaignStarting => IsTurkish 
-        ? "Campaign baslatiliyor, AI sistemi ve Diyalog sistemi hazirlaniyor..." 
-        : "Campaign starting, AI system and Dialogue system preparing...";
-    public static string GameEnded => IsTurkish 
-        ? "Oyun sona erdi, AI sistemi kapatildi." 
-        : "Game ended, AI system closed.";
+    public static string CampaignStarting => "Campaign starting, AI system and Dialogue system preparing...";
+    public static string GameEnded => "Game ended, AI system closed.";
     
     // AI system messages
-    public static string AISystemStarting => IsTurkish ? "AI sistemi baslatiliyor..." : "AI system starting...";
-    public static string AISystemStarted => IsTurkish ? "AI sistemi basariyla baslatildi!" : "AI system started successfully!";
-    public static string AISystemNotReady => IsTurkish ? "AI sistemi henuz hazir degil!" : "AI system not ready yet!";
-    public static string AISystemError => IsTurkish ? "AI sistemi baslatilamadi" : "Failed to start AI system";
+    public static string AISystemStarting => "AI system starting...";
+    public static string AISystemStarted => "AI system started successfully!";
+    public static string AISystemNotReady => "AI system not ready yet!";
+    public static string AISystemError => "Failed to start AI system";
     
     // Language detection
-    public static string LanguageDetected(string detected, string effective) => IsTurkish 
-        ? $"Oyun dili algilandi: {detected} -> {effective}" 
-        : $"Game language detected: {detected} -> {effective}";
+    public static string LanguageDetected(string detected, string effective) => 
+        $"Game language detected: {detected} -> {effective}";
     
     // Test messages
-    public static string FullProofTestStarting => IsTurkish ? "Full Proof Test baslatiliyor..." : "Full Proof Test starting...";
-    public static string QuickTestStarting => IsTurkish ? "Hizli Proof Test baslatiliyor..." : "Quick Proof Test starting...";
+    public static string FullProofTestStarting => "Full Proof Test starting...";
+    public static string QuickTestStarting => "Quick Proof Test starting...";
     
     // Lord thinking
-    public static string LordNotFound => IsTurkish ? "Dusunecek lord bulunamadi!" : "No lord found to think!";
-    public static string LordThinking(string name) => IsTurkish ? $"{name} dusunuyor..." : $"{name} is thinking...";
-    public static string LordDecidedToWait(string name) => IsTurkish ? $"{name} beklemeye karar verdi" : $"{name} decided to wait";
+    public static string LordNotFound => "No lord found to think!";
+    public static string LordThinking(string name) => $"{name} is thinking...";
+    public static string LordDecidedToWait(string name) => $"{name} decided to wait";
     
     // Pause messages
-    public static string GamePausedAICancelled => IsTurkish 
-        ? "Oyun duraklatildi, AI islemi iptal edildi." 
-        : "Game paused, AI operation cancelled.";
-    public static string GamePausedLoopStopped => IsTurkish 
-        ? "Oyun duraklatildi, AI dongusu durduruluyor." 
-        : "Game paused, AI loop stopping.";
-    public static string GamePausedResultNotShown => IsTurkish 
-        ? "Oyun duraklatildi, sonuc uygulanmayacak." 
-        : "Game paused, result will not be applied.";
-    public static string GamePausedAIResultHidden => IsTurkish 
-        ? "Oyun duraklatildi, AI sonucu gosterilmeyecek." 
-        : "Game paused, AI result will not be shown.";
+    public static string GamePausedAICancelled => "Game paused, AI operation cancelled.";
+    public static string GamePausedLoopStopped => "Game paused, AI loop stopping.";
+    public static string GamePausedResultNotShown => "Game paused, result will not be applied.";
+    public static string GamePausedAIResultHidden => "Game paused, AI result will not be shown.";
     
     // Workflow messages
-    public static string WorkflowFailed => IsTurkish ? "Workflow basarisiz" : "Workflow failed";
-    public static string AIThinkingError => IsTurkish ? "AI dusunme hatasi" : "AI thinking error";
-    public static string AIProcessingError => IsTurkish ? "AI isleme hatasi" : "AI processing error";
+    public static string WorkflowFailed => "Workflow failed";
+    public static string AIThinkingError => "AI thinking error";
+    public static string AIProcessingError => "AI processing error";
     
     // Hero titles
-    public static string King => IsTurkish ? "Kral " : "King ";
+    public static string King => "King ";
     public static string Lord => "Lord ";
     public static string Notable => "Notable ";
     
     // Active message
-    public static string ModActiveMessage(string langText) => IsTurkish 
-        ? $"Living in Calradia AI aktif! ({langText}) NumPad1-5 ile test edin." 
-        : $"Living in Calradia AI active! ({langText}) Test with NumPad1-5.";
+    public static string ModActiveMessage(string langText) => 
+        $"Living in Calradia AI active! ({langText}) Test with NumPad1-5.";
     
     // Error prefix
-    public static string Error => IsTurkish ? "HATA" : "ERROR";
+    public static string Error => "ERROR";
 }
