@@ -17,14 +17,16 @@
 
   <!-- Output to project's bin folder -->
   <PropertyGroup>
-    <OutputPath>bin\$(Configuration)\net472</OutputPath>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
   </PropertyGroup>
   
   <!-- Module output paths -->
   <PropertyGroup>
     <SolutionDir>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'LivingInCalradia.sln'))</SolutionDir>
     <ProjectModulePath>$(SolutionDir)\modules\LivingInCalradia\bin\Win64_Shipping_Client</ProjectModulePath>
+    <ProjectModuleDataPath>$(SolutionDir)\modules\LivingInCalradia\ModuleData</ProjectModuleDataPath>
     <GameModulePath>$(GameFolder)\Modules\LivingInCalradia\bin\Win64_Shipping_Client</GameModulePath>
+    <GameModuleRoot>$(GameFolder)\Modules\LivingInCalradia</GameModuleRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -85,28 +87,44 @@
   
   <!-- Post-build: Copy to project's modules folder -->
   <Target Name="CopyToProjectModules" AfterTargets="Build">
+    <!-- Create directories -->
     <MakeDir Directories="$(ProjectModulePath)" Condition="!Exists('$(ProjectModulePath)')" />
+    <MakeDir Directories="$(ProjectModuleDataPath)\Languages\EN" Condition="!Exists('$(ProjectModuleDataPath)\Languages\EN')" />
+    
+    <!-- Collect files -->
     <ItemGroup>
       <DllFiles Include="$(OutputPath)\*.dll" />
       <ConfigFiles Include="$(OutputPath)\ai-config.json" Condition="Exists('$(OutputPath)\ai-config.json')" />
     </ItemGroup>
-    <Copy SourceFiles="@(DllFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(ConfigFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" />
-    <Message Text="[LivingInCalradia] Copied to: $(ProjectModulePath)" Importance="high" />
-  </Target>
-  
-  <!-- Post-build: Copy to game folder (if exists) -->
-  <Target Name="CopyToGameModules" AfterTargets="CopyToProjectModules" Condition="Exists('$(GameFolder)')">
-    <MakeDir Directories="$(GameModulePath)" Condition="!Exists('$(GameModulePath)')" />
-    <MakeDir Directories="$(GameFolder)\Modules\LivingInCalradia" Condition="!Exists('$(GameFolder)\Modules\LivingInCalradia')" />
     
     <!-- Copy DLLs and config -->
+    <Copy SourceFiles="@(DllFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ConfigFiles)" DestinationFolder="$(ProjectModulePath)" SkipUnchangedFiles="true" Condition="!Exists('$(ProjectModulePath)\ai-config.json')" />
+    
+    <Message Text="[LivingInCalradia] Copied DLLs to: $(ProjectModulePath)" Importance="high" />
+  </Target>
+  
+  <!-- Post-build: Copy to game folder (if exists and not locked) -->
+  <Target Name="CopyToGameModules" AfterTargets="CopyToProjectModules" Condition="Exists('$(GameFolder)')">
+    <MakeDir Directories="$(GameModulePath)" Condition="!Exists('$(GameModulePath)')" />
+    <MakeDir Directories="$(GameModuleRoot)\ModuleData\Languages\EN" Condition="!Exists('$(GameModuleRoot)\ModuleData\Languages\EN')" />
+    
+    <!-- Collect all module files -->
     <ItemGroup>
-      <ModuleFiles Include="$(ProjectModulePath)\*.*" />
-      <SubModuleXml Include="$(SolutionDir)\modules\LivingInCalradia\SubModule.xml" Condition="Exists('$(SolutionDir)\modules\LivingInCalradia\SubModule.xml')" />
+      <GameDllFiles Include="$(ProjectModulePath)\*.dll" />
+      <GameSubModuleXml Include="$(SolutionDir)\modules\LivingInCalradia\SubModule.xml" />
+      <GameModuleDataFiles Include="$(SolutionDir)\modules\LivingInCalradia\ModuleData\*.xml" />
+      <GameLanguageFiles Include="$(SolutionDir)\modules\LivingInCalradia\ModuleData\Languages\EN\*.xml" />
+      <GameConfigFile Include="$(ProjectModulePath)\ai-config.json" Condition="Exists('$(ProjectModulePath)\ai-config.json')" />
     </ItemGroup>
-    <Copy SourceFiles="@(ModuleFiles)" DestinationFolder="$(GameModulePath)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(SubModuleXml)" DestinationFolder="$(GameFolder)\Modules\LivingInCalradia" SkipUnchangedFiles="true" />
-    <Message Text="[LivingInCalradia] Deployed to game: $(GameModulePath)" Importance="high" />
+    
+    <!-- Copy all files -->
+    <Copy SourceFiles="@(GameDllFiles)" DestinationFolder="$(GameModulePath)" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(GameSubModuleXml)" DestinationFolder="$(GameModuleRoot)" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(GameModuleDataFiles)" DestinationFolder="$(GameModuleRoot)\ModuleData" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(GameLanguageFiles)" DestinationFolder="$(GameModuleRoot)\ModuleData\Languages\EN" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(GameConfigFile)" DestinationFolder="$(GameModulePath)" SkipUnchangedFiles="true" ContinueOnError="true" Condition="!Exists('$(GameModulePath)\ai-config.json')" />
+    
+    <Message Text="[LivingInCalradia] Deployed to game: $(GameModuleRoot)" Importance="high" />
   </Target>
 </Project>

@@ -10,6 +10,52 @@ namespace LivingInCalradia.AI.Configuration;
 /// </summary>
 public sealed class AIConfiguration
 {
+    // ========== GLOBAL LOG STATE (Shared across all behaviors) =========
+    // These static properties are used by all AI behaviors to check log state
+    // Updated by BannerlordSubModule.ToggleAILogs()
+    private static bool _globalThoughtLogsEnabled = true;
+    private static bool _globalActionLogsEnabled = true;
+    private static bool _globalDebugLogsEnabled = false;
+    
+    /// <summary>
+    /// Global toggle for thought logs. Shared across all behaviors.
+    /// </summary>
+    public static bool GlobalThoughtLogsEnabled
+    {
+        get => _globalThoughtLogsEnabled;
+        set => _globalThoughtLogsEnabled = value;
+    }
+    
+    /// <summary>
+    /// Global toggle for action logs. Shared across all behaviors.
+    /// </summary>
+    public static bool GlobalActionLogsEnabled
+    {
+        get => _globalActionLogsEnabled;
+        set => _globalActionLogsEnabled = value;
+    }
+    
+    /// <summary>
+    /// Global toggle for debug logs. Shared across all behaviors.
+    /// </summary>
+    public static bool GlobalDebugLogsEnabled
+    {
+        get => _globalDebugLogsEnabled;
+        set => _globalDebugLogsEnabled = value;
+    }
+    
+    /// <summary>
+    /// Sets all global log states at once. Called by BannerlordSubModule.
+    /// </summary>
+    public static void SetGlobalLogState(bool thoughtLogs, bool actionLogs, bool debugLogs = false)
+    {
+        _globalThoughtLogsEnabled = thoughtLogs;
+        _globalActionLogsEnabled = actionLogs;
+        _globalDebugLogsEnabled = debugLogs;
+    }
+    
+    // ========== INSTANCE PROPERTIES =========
+    
     public string ApiKey { get; set; } = string.Empty;
     public string ModelId { get; set; } = "llama-3.1-8b-instant";
     public string Provider { get; set; } = "Groq";
@@ -17,6 +63,39 @@ public sealed class AIConfiguration
     public double Temperature { get; set; } = 0.7;
     public int MaxTokens { get; set; } = 500;
     
+    // Logging & Display options (instance - for initial load, use Global* for runtime checks)
+    public bool EnableThoughtLogs { get; set; } = true;
+    public bool EnableActionLogs { get; set; } = true;
+    public bool EnableDebugLogs { get; set; } = false;
+    
+    // Performance & Rate limiting - COST OPTIMIZED (~$2.50/day max)
+    public int TickIntervalSeconds { get; set; } = 120;
+    public int MaxLordsPerTick { get; set; } = 1;
+    
+    // Event-Driven AI - More conservative to reduce API costs
+    public bool EnableEventDrivenAI { get; set; } = true;
+    public int EventCooldownMinutes { get; set; } = 15;  // 10 ? 15 dakika
+    
+    // World AI - Enabled but slow for cost control
+    public bool EnableWorldAI { get; set; } = true;
+    public int WorldTickIntervalSeconds { get; set; } = 600;  // 10 dakika
+    public int WorldMaxLordsPerTick { get; set; } = 1;
+    public bool PrioritizeImportantLords { get; set; } = true;
+    
+    // Event filtering - Skip minor events
+    public bool SkipMinorBattleEvents { get; set; } = true;
+    public int MinimumBattleSize { get; set; } = 50;
+    
+    // Hotkey customization - Key names like "F1", "K", etc.
+    // Set to empty string or "None" to disable
+    // Insert is always the settings key by default (F10 conflicts with game)
+    public string HotkeyShowSettings { get; set; } = "Insert";        // Settings panel (default: Insert)
+    public string HotkeyFullProofTest { get; set; } = "";             // Disabled by default
+    public string HotkeyTriggerAI { get; set; } = "";                 // Disabled by default
+    public string HotkeyQuickTest { get; set; } = "";                 // Disabled by default
+    public string HotkeyToggleLogs { get; set; } = "";                // Disabled by default
+    public string HotkeyShowThoughts { get; set; } = "";              // Disabled by default
+
     // Backward compatibility
     public string OpenAIApiKey 
     { 
@@ -113,6 +192,114 @@ public sealed class AIConfiguration
             {
                 config.MaxTokens = maxTokens;
             }
+            
+            // Logging options
+            var enableThoughtLogs = ExtractJsonValue(json, "EnableThoughtLogs");
+            if (enableThoughtLogs != null)
+            {
+                config.EnableThoughtLogs = enableThoughtLogs.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            var enableActionLogs = ExtractJsonValue(json, "EnableActionLogs");
+            if (enableActionLogs != null)
+            {
+                config.EnableActionLogs = enableActionLogs.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            var enableDebugLogs = ExtractJsonValue(json, "EnableDebugLogs");
+            if (enableDebugLogs != null)
+            {
+                config.EnableDebugLogs = enableDebugLogs.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            // Performance options
+            var tickIntervalStr = ExtractJsonValue(json, "TickIntervalSeconds");
+            if (int.TryParse(tickIntervalStr, out var tickInterval) && tickInterval > 0)
+            {
+                config.TickIntervalSeconds = tickInterval;
+            }
+            
+            var maxLordsStr = ExtractJsonValue(json, "MaxLordsPerTick");
+            if (int.TryParse(maxLordsStr, out var maxLords) && maxLords > 0)
+            {
+                config.MaxLordsPerTick = maxLords;
+            }
+            
+            // Event-Driven AI options
+            var enableEventDriven = ExtractJsonValue(json, "EnableEventDrivenAI");
+            if (enableEventDriven != null)
+            {
+                config.EnableEventDrivenAI = enableEventDriven.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            var eventCooldownStr = ExtractJsonValue(json, "EventCooldownMinutes");
+            if (int.TryParse(eventCooldownStr, out var eventCooldown) && eventCooldown > 0)
+            {
+                config.EventCooldownMinutes = eventCooldown;
+            }
+            
+            // World AI options
+            var enableWorldAI = ExtractJsonValue(json, "EnableWorldAI");
+            if (enableWorldAI != null)
+            {
+                config.EnableWorldAI = enableWorldAI.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            var worldTickStr = ExtractJsonValue(json, "WorldTickIntervalSeconds");
+            if (int.TryParse(worldTickStr, out var worldTick) && worldTick > 0)
+            {
+                config.WorldTickIntervalSeconds = worldTick;
+            }
+            
+            var worldMaxLordsStr = ExtractJsonValue(json, "WorldMaxLordsPerTick");
+            if (int.TryParse(worldMaxLordsStr, out var worldMaxLords) && worldMaxLords > 0)
+            {
+                config.WorldMaxLordsPerTick = worldMaxLords;
+            }
+            
+            var prioritizeStr = ExtractJsonValue(json, "PrioritizeImportantLords");
+            if (prioritizeStr != null)
+            {
+                config.PrioritizeImportantLords = prioritizeStr.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            // Event filtering options
+            var skipMinorEventsStr = ExtractJsonValue(json, "SkipMinorBattleEvents");
+            if (skipMinorEventsStr != null)
+            {
+                config.SkipMinorBattleEvents = skipMinorEventsStr.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            var minBattleSizeStr = ExtractJsonValue(json, "MinimumBattleSize");
+            if (int.TryParse(minBattleSizeStr, out var minBattleSize) && minBattleSize > 0)
+            {
+                config.MinimumBattleSize = minBattleSize;
+            }
+            
+            // Hotkey customization
+            var hotkeyFullProof = ExtractJsonValue(json, "HotkeyFullProofTest");
+            if (!string.IsNullOrEmpty(hotkeyFullProof))
+                config.HotkeyFullProofTest = hotkeyFullProof;
+            
+            var hotkeyTriggerAI = ExtractJsonValue(json, "HotkeyTriggerAI");
+            if (!string.IsNullOrEmpty(hotkeyTriggerAI))
+                config.HotkeyTriggerAI = hotkeyTriggerAI;
+            
+            var hotkeyQuickTest = ExtractJsonValue(json, "HotkeyQuickTest");
+            if (!string.IsNullOrEmpty(hotkeyQuickTest))
+                config.HotkeyQuickTest = hotkeyQuickTest;
+            
+            var hotkeyToggleLogs = ExtractJsonValue(json, "HotkeyToggleLogs");
+            if (!string.IsNullOrEmpty(hotkeyToggleLogs))
+                config.HotkeyToggleLogs = hotkeyToggleLogs;
+            
+            var hotkeyShowThoughts = ExtractJsonValue(json, "HotkeyShowThoughts");
+            if (!string.IsNullOrEmpty(hotkeyShowThoughts))
+                config.HotkeyShowThoughts = hotkeyShowThoughts;
+            
+            var hotkeyShowSettings = ExtractJsonValue(json, "HotkeyShowSettings");
+            if (!string.IsNullOrEmpty(hotkeyShowSettings))
+                config.HotkeyShowSettings = hotkeyShowSettings;
         }
         catch (Exception ex)
         {

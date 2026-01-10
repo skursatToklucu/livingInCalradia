@@ -4,13 +4,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using LivingInCalradia.AI.Memory;
+using LivingInCalradia.AI.Personality;
 using LivingInCalradia.Core.Application.Interfaces;
 
 namespace LivingInCalradia.AI.Orchestration;
 
 /// <summary>
 /// AI-powered dialogue orchestrator using Groq API.
-/// Generates dynamic, contextual NPC responses.
+/// Generates dynamic, contextual NPC responses with personality support.
 /// </summary>
 public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
 {
@@ -18,6 +19,7 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
     private readonly string _model;
     private readonly double _temperature;
     private readonly ConversationMemory _conversationMemory;
+    private readonly PersonalityGenerator _personalityGenerator;
     
     public GroqDialogueOrchestrator(
         string apiKey, 
@@ -30,6 +32,7 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         _model = model;
         _temperature = temperature;
         _conversationMemory = new ConversationMemory(maxEntriesPerNpc: 10);
+        _personalityGenerator = new PersonalityGenerator();
         
         _httpClient = new HttpClient
         {
@@ -43,6 +46,11 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
     /// Gets the conversation memory for external access.
     /// </summary>
     public ConversationMemory ConversationMemory => _conversationMemory;
+    
+    /// <summary>
+    /// Gets the personality generator for external access.
+    /// </summary>
+    public PersonalityGenerator PersonalityGenerator => _personalityGenerator;
     
     public async Task<DialogueResponse> GenerateResponseAsync(
         string npcId,
@@ -67,7 +75,7 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
             if (!response.IsSuccessStatusCode)
             {
                 Console.WriteLine($"[Dialogue AI] API Error: {response.StatusCode}");
-                return DialogueResponse.Error("Hmm... I was going to say something but I forgot.");
+                return DialogueResponse.Error("Hmm... I seem to have lost my train of thought.");
             }
             
             var npcResponse = ExtractContentFromResponse(responseJson);
@@ -89,7 +97,7 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         catch (Exception ex)
         {
             Console.WriteLine($"[Dialogue AI] Error: {ex.Message}");
-            return DialogueResponse.Error("*looks thoughtfully*");
+            return DialogueResponse.Error("*looks at you thoughtfully*");
         }
     }
     
@@ -97,50 +105,71 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
     {
         var sb = new StringBuilder();
         
-        // Base personality based on role
-        sb.AppendLine($"You are {npcName}, a {GetRoleDescription(npcRole)}.");
-        sb.AppendLine($"You live in the world of Mount & Blade II: Bannerlord.");
+        // Get personality for this NPC
+        var npcId = $"{npcRole}_{npcName}";
+        var isKing = npcRole.ToLowerInvariant().Contains("king");
+        var isLord = npcRole.ToLowerInvariant().Contains("lord") || isKing;
+        var personality = _personalityGenerator.GetPersonality(npcId, null, context.NpcFaction, isLord, isKing);
+        
+        // Base identity
+        sb.AppendLine($"You are {npcName}, a {GetRoleDescription(npcRole)} in Mount & Blade II: Bannerlord.");
         sb.AppendLine();
         
-        // Role-specific personality
+        // Speech style - formal but understandable
+        sb.AppendLine("SPEECH STYLE - IMPORTANT:");
+        sb.AppendLine("- Speak in a FORMAL, dignified manner befitting a medieval character");
+        sb.AppendLine("- Keep responses SHORT (1-3 sentences)");
+        sb.AppendLine("- You may use: 'Aye', 'Nay', 'Indeed', 'Very well', 'My lord'");
+        sb.AppendLine("- Avoid modern slang and casual speech");
+        sb.AppendLine("- Stay in character at all times");
+        sb.AppendLine();
+        
+        // Personality traits (only for lords/important NPCs)
+        if (isLord)
+        {
+            sb.AppendLine("YOUR PERSONALITY:");
+            sb.AppendLine(personality.GetPersonalityDescription());
+            sb.AppendLine();
+        }
+        
+        // Role-specific traits
+        sb.AppendLine("YOUR CHARACTER:");
         sb.AppendLine(GetPersonalityTraits(npcRole));
         sb.AppendLine();
         
         // Relationship context
+        sb.AppendLine("RELATIONSHIP WITH PLAYER:");
         if (context.RelationWithPlayer >= 50)
         {
-            sb.AppendLine("You have a very good relationship with this person, you trust them and speak in a friendly manner.");
+            sb.AppendLine("You consider this person a trusted friend. Be warm and helpful.");
+        }
+        else if (context.RelationWithPlayer >= 20)
+        {
+            sb.AppendLine("You have a positive view of this person. Be polite and respectful.");
         }
         else if (context.RelationWithPlayer >= 0)
         {
-            sb.AppendLine("You have a normal relationship with this person, you speak formally but politely.");
+            sb.AppendLine("You are neutral towards this person. Be formal and businesslike.");
         }
-        else if (context.RelationWithPlayer >= -50)
+        else if (context.RelationWithPlayer >= -30)
         {
-            sb.AppendLine("Your relationship with this person is tense, you speak coldly and distantly.");
+            sb.AppendLine("You are wary of this person. Be cold and distant.");
         }
         else
         {
-            sb.AppendLine("You hate this person, you speak hostilely and threateningly.");
+            sb.AppendLine("You dislike this person. Be hostile and dismissive.");
         }
         
         // War context
         if (context.IsAtWar)
         {
-            sb.AppendLine("ATTENTION: Your kingdoms are at war! Consider this in your response.");
+            sb.AppendLine();
+            sb.AppendLine("WARNING: Your factions are at WAR! Be very cautious and potentially hostile.");
         }
         
         // Mood
-        sb.AppendLine($"Your current mood: {context.NpcMood}");
-        
-        // Instructions
         sb.AppendLine();
-        sb.AppendLine("RULES:");
-        sb.AppendLine("- Give short and concise answers (1-3 sentences)");
-        sb.AppendLine("- Speak according to your character");
-        sb.AppendLine("- Use medieval language style");
-        sb.AppendLine("- Show your emotions but don't overdo it");
-        sb.AppendLine("- Stay true to the game world");
+        sb.AppendLine($"Your current mood: {context.NpcMood}");
         
         return sb.ToString();
     }
@@ -150,29 +179,31 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         var roleLower = role.ToLowerInvariant();
         
         if (roleLower.Contains("king"))
-            return "powerful and honorable king";
+            return "powerful and respected king";
         if (roleLower.Contains("lord"))
-            return "noble lord";
+            return "noble lord and warrior";
         if (roleLower.Contains("merchant"))
-            return "cunning merchant";
+            return "shrewd merchant";
         if (roleLower.Contains("blacksmith"))
-            return "master blacksmith";
+            return "skilled blacksmith";
         if (roleLower.Contains("tavern"))
-            return "cheerful tavern keeper";
+            return "experienced tavern keeper";
         if (roleLower.Contains("villager"))
-            return "simple villager";
+            return "humble villager";
         if (roleLower.Contains("soldier"))
-            return "experienced soldier";
+            return "battle-hardened soldier";
         if (roleLower.Contains("commander"))
-            return "seasoned commander";
+            return "seasoned military commander";
         if (roleLower.Contains("lady"))
-            return "noble lady";
+            return "noble lady of high standing";
         if (roleLower.Contains("bandit"))
-            return "ruthless bandit";
+            return "dangerous outlaw";
         if (roleLower.Contains("gang"))
-            return "street gang leader";
+            return "ruthless gang leader";
+        if (roleLower.Contains("wanderer"))
+            return "mysterious wanderer";
             
-        return "Calradia resident";
+        return "resident of Calradia";
     }
     
     private string GetPersonalityTraits(string role)
@@ -180,30 +211,33 @@ public sealed class GroqDialogueOrchestrator : IDialogueOrchestrator
         var roleLower = role.ToLowerInvariant();
         
         if (roleLower.Contains("king"))
-            return "You are authoritative, wise, and put your kingdom's interests above all else. You address others as a ruler would.";
+            return "You are authoritative and wise. You speak as a ruler, with dignity and power. Your kingdom's interests come first.";
             
         if (roleLower.Contains("lord"))
-            return "You are honorable, proud, and a warrior. You hold your honor above all else. You make your nobility felt.";
+            return "You are proud and honorable. You speak with the authority of a noble warrior. Honor and duty guide your words.";
             
         if (roleLower.Contains("merchant"))
-            return "You are clever, calculating, and opportunistic. You try to turn every conversation into a trade opportunity. Money is everything.";
+            return "You are clever and opportunistic. You see profit in every conversation. Gold is your primary concern.";
             
         if (roleLower.Contains("blacksmith"))
-            return "You are hardworking, practical, and speak little. You focus on your work. You are passionate about weapons and armor.";
+            return "You are practical and hardworking. You speak little but value quality craftsmanship above all.";
             
         if (roleLower.Contains("tavern"))
-            return "You are friendly, curious about gossip, and hospitable. You know everyone, you hear everything.";
+            return "You are friendly and well-informed. You hear all the gossip and know everyone's business.";
             
         if (roleLower.Contains("villager"))
-            return "You are humble, fearful, and respectful to lords. Life is hard, taxes are heavy. You just want to survive.";
+            return "You are humble and cautious. Life is hard, and you respect those with power. You speak simply.";
             
         if (roleLower.Contains("soldier"))
-            return "You are disciplined, loyal, and follow orders. You love telling war stories.";
+            return "You are disciplined and loyal. You follow orders and respect the chain of command. War is your life.";
             
         if (roleLower.Contains("bandit"))
-            return "You are dangerous, cunning, and ruthless. You exploit the weak. Power is everything.";
+            return "You are dangerous and cunning. You respect only strength. You take what you want.";
+        
+        if (roleLower.Contains("wanderer"))
+            return "You are mysterious and experienced. You have traveled far and seen much. You speak with wisdom.";
             
-        return "You are an ordinary person living in Calradia. You struggle with the difficulties of daily life.";
+        return "You are a common person trying to survive in a harsh world. You speak plainly and honestly.";
     }
     
     private string BuildUserPrompt(string playerMessage, DialogueContext context, string conversationHistory)

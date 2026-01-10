@@ -153,99 +153,123 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
     
     private void AddPlayerDialogueOptions(CampaignGameStarter starter)
     {
-        // Option 1: General chat
+        // Option 1: General greeting / How are you
         starter.AddPlayerLine(
             "ai_dialogue_opt_1",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt1}How are you doing? How is your situation?",
+            "{=ai_opt1}How do you fare? What news do you bring?",
             () => _isInitialized,
-            () => TriggerAIResponse("How are you doing? How is your situation?"),
+            () => TriggerAIResponse("How are you? What news can you share with me?"),
             90,
             null,
             null);
         
-        // Option 2: Ask about region
+        // Option 2: Ask about the region/land
         starter.AddPlayerLine(
             "ai_dialogue_opt_2",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt2}What is happening in this region?",
+            "{=ai_opt2}Tell me of this land. What troubles these parts?",
             () => _isInitialized,
-            () => TriggerAIResponse("What is happening in this region? Tell me about it."),
+            () => TriggerAIResponse("What is happening in this region? Are there any troubles or opportunities?"),
             89,
             null,
             null);
         
-        // Option 3: Ask about trade
+        // Option 3: Trade and economy
         starter.AddPlayerLine(
             "ai_dialogue_opt_3",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt3}What do you think about trade?",
+            "{=ai_opt3}How fares trade in these lands?",
             () => _isInitialized,
-            () => TriggerAIResponse("What do you think about trade? Are you making good money?"),
+            () => TriggerAIResponse("How is trade? Is there profit to be made here?"),
             88,
             null,
             null);
         
-        // Option 4: Ask about war
+        // Option 4: War and conflict
         starter.AddPlayerLine(
             "ai_dialogue_opt_4",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt4}What do you know about the wars?",
+            "{=ai_opt4}What do you know of the wars being waged?",
             () => _isInitialized,
-            () => TriggerAIResponse("What do you know about the wars? Is there any danger?"),
+            () => TriggerAIResponse("What news of war? Who fights whom, and who prevails?"),
             87,
             null,
             null);
         
-        // Option 5: Ask for advice
+        // Option 5: Seek counsel/advice
         starter.AddPlayerLine(
             "ai_dialogue_opt_5",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt5}Give me some advice.",
+            "{=ai_opt5}I seek your counsel. What wisdom can you offer?",
             () => _isInitialized,
-            () => TriggerAIResponse("Give me some advice. What should I do?"),
+            () => TriggerAIResponse("I need advice. What would you suggest I do in these uncertain times?"),
             86,
             null,
             null);
         
-        // Option 6: Threaten (if relation is low)
+        // Option 6: Threaten (if relation is negative)
         starter.AddPlayerLine(
             "ai_dialogue_opt_6",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt6}I'm warning you, be careful!",
+            "{=ai_opt6}You would be wise to fear me. Remember that.",
             () => _isInitialized && GetCurrentRelation() < 0,
-            () => TriggerAIResponse("I'm warning you! Get out of my way or face the consequences!"),
+            () => TriggerAIResponse("I am warning you! Cross me and you shall regret it. Do you understand?"),
             85,
             null,
             null);
         
-        // Option 7: Flatter (if relation is positive)
+        // Option 7: Compliment/Flatter (if relation is positive)
         starter.AddPlayerLine(
             "ai_dialogue_opt_7",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt7}It's an honor to meet someone like you.",
+            "{=ai_opt7}Your reputation precedes you. It is an honor.",
             () => _isInitialized && GetCurrentRelation() >= 0,
-            () => TriggerAIResponse("It's a great honor to meet someone like you."),
+            () => TriggerAIResponse("I have heard great things about you. It is truly an honor to speak with you."),
             84,
             null,
             null);
         
-        // Option 8: Custom question (placeholder - would need text input UI)
+        // Option 8: Personal question
         starter.AddPlayerLine(
             "ai_dialogue_opt_8",
             "ai_dialogue_options",
             "ai_dialogue_response_state",
-            "{=ai_opt8}Tell me about yourself.",
+            "{=ai_opt8}Tell me about yourself. Who are you?",
             () => _isInitialized,
-            () => TriggerAIResponse("Tell me about yourself. Give me information about who you are and what you do."),
+            () => TriggerAIResponse("Tell me about yourself. What is your story? What drives you?"),
             83,
+            null,
+            null);
+        
+        // Option 9: Ask about their lord/faction (for non-leaders)
+        starter.AddPlayerLine(
+            "ai_dialogue_opt_9",
+            "ai_dialogue_options",
+            "ai_dialogue_response_state",
+            "{=ai_opt9}What think you of your liege and kingdom?",
+            () => _isInitialized && _currentDialogueHero != null && !_currentDialogueHero.IsKingdomLeader,
+            () => TriggerAIResponse("What do you think of your king and your kingdom? Are you content with your lot?"),
+            82,
+            null,
+            null);
+        
+        // Option 10: Persuasion attempt (for lords only)
+        starter.AddPlayerLine(
+            "ai_dialogue_opt_10",
+            "ai_dialogue_options",
+            "ai_dialogue_response_state",
+            "{=ai_opt10}I have a proposition for you. Hear me out.",
+            () => _isInitialized && _currentDialogueHero != null && _currentDialogueHero.IsLord,
+            () => TriggerAIResponse("I have a proposal that may interest you. Would you be willing to work with me on a matter of importance?"),
+            81,
             null,
             null);
     }
@@ -274,28 +298,59 @@ public sealed class AIDialogueBehavior : CampaignBehaviorBase
     {
         if (_currentDialogueHero == null)
         {
-            MBTextManager.SetTextVariable("AI_GREETING", "Yes, what is it?");
+            MBTextManager.SetTextVariable("AI_GREETING", "Yes? What is it?");
             return;
         }
         
         var relation = GetCurrentRelation();
+        var isKing = _currentDialogueHero.IsKingdomLeader;
+        var isLord = _currentDialogueHero.IsLord;
         string greeting;
         
         if (relation >= 50)
         {
-            greeting = "Ah, my friend! It's so good to see you. Please, let's talk.";
+            if (isKing)
+                greeting = "Ah, my trusted friend! It brings me joy to see you. Come, let us speak.";
+            else if (isLord)
+                greeting = "Well met, my friend! It is always a pleasure. What would you discuss?";
+            else
+                greeting = "Oh, hello there! Good to see you again. What can I do for you?";
+        }
+        else if (relation >= 20)
+        {
+            if (isKing)
+                greeting = "You may approach. I shall hear what you have to say.";
+            else if (isLord)
+                greeting = "Very well, I shall give you my attention. Speak your mind.";
+            else
+                greeting = "Aye, what brings you to me? I am listening.";
         }
         else if (relation >= 0)
         {
-            greeting = "Yes? You wanted to speak with me. I'm listening.";
+            if (isKing)
+                greeting = "State your business. I have matters of the realm to attend to.";
+            else if (isLord)
+                greeting = "Yes? What do you want? Be quick about it.";
+            else
+                greeting = "Hmm? You wished to speak with me?";
         }
-        else if (relation >= -50)
+        else if (relation >= -30)
         {
-            greeting = "What do you want? I don't have much time.";
+            if (isKing)
+                greeting = "You dare approach me? Speak quickly, before I lose my patience.";
+            else if (isLord)
+                greeting = "What do you want? I have little desire to speak with you.";
+            else
+                greeting = "What is it? I have nothing to say to you.";
         }
         else
         {
-            greeting = "You dare approach me? Fine, speak your piece.";
+            if (isKing)
+                greeting = "You have some nerve showing your face before me. This better be important.";
+            else if (isLord)
+                greeting = "Begone from my sight! I have no words for the likes of you.";
+            else
+                greeting = "Leave me alone. I want nothing to do with you.";
         }
         
         MBTextManager.SetTextVariable("AI_GREETING", greeting);

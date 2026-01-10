@@ -5,14 +5,15 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using LivingInCalradia.AI.Memory;
+using LivingInCalradia.AI.Personality;
 using LivingInCalradia.Core.Application.Interfaces;
 using LivingInCalradia.Core.Domain.ValueObjects;
 
 namespace LivingInCalradia.AI.Orchestration;
 
 /// <summary>
-/// Direct Groq API orchestrator with memory support.
-/// Uses OpenAI-compatible REST API with personality-based prompts.
+/// Direct Groq API orchestrator with memory and personality support.
+/// Uses OpenAI-compatible REST API with dynamic personality-based prompts.
 /// </summary>
 public sealed class GroqOrchestrator : IAgentOrchestrator
 {
@@ -20,6 +21,7 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     private readonly string _model;
     private readonly double _temperature;
     private readonly AgentMemory _memory;
+    private readonly PersonalityGenerator _personalityGenerator;
     
     public GroqOrchestrator(
         string apiKey, 
@@ -33,6 +35,7 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         _model = model;
         _temperature = temperature;
         _memory = new AgentMemory(maxMemoriesPerAgent: 5);
+        _personalityGenerator = new PersonalityGenerator();
         
         _httpClient = new HttpClient
         {
@@ -47,12 +50,17 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     /// </summary>
     public AgentMemory Memory => _memory;
     
+    /// <summary>
+    /// Gets the personality generator for external access.
+    /// </summary>
+    public PersonalityGenerator PersonalityGenerator => _personalityGenerator;
+    
     public async Task<AgentDecision> ReasonAsync(
         string agentId,
         WorldPerception perception,
         CancellationToken cancellationToken = default)
     {
-        var systemPrompt = GetPersonalityPrompt(agentId);
+        var systemPrompt = BuildPersonalityPrompt(agentId, perception);
         var memoryContext = _memory.GetMemoryContext(agentId);
         var userPrompt = BuildUserPrompt(agentId, perception, memoryContext);
 
@@ -170,33 +178,80 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         return fullResponse;
     }
     
+    private string BuildPersonalityPrompt(string agentId, WorldPerception perception)
+    {
+        var sb = new StringBuilder();
+        
+        // Extract info from agentId (format: "Lord_Name_Clan")
+        var parts = agentId.Split('_');
+        var heroType = parts.Length > 0 ? parts[0] : "Lord";
+        var heroName = parts.Length > 1 ? parts[1] : "Unknown";
+        var clanName = parts.Length > 2 ? parts[2] : null;
+        
+        var isKing = heroType.Equals("King", StringComparison.OrdinalIgnoreCase) || 
+                     agentId.ToLowerInvariant().Contains("king");
+        var isFactionLeader = isKing || heroType.Equals("Leader", StringComparison.OrdinalIgnoreCase);
+        
+        // Get or generate personality for this lord
+        var personality = _personalityGenerator.GetPersonality(
+            agentId, 
+            clanName, 
+            perception.Relations.Count > 0 ? null : null,
+            isFactionLeader,
+            isKing);
+        
+        // Build the prompt with light medieval style (formal but understandable)
+        sb.AppendLine($"You are {heroName}, a noble {heroType} in the medieval world of Mount & Blade II: Bannerlord.");
+        sb.AppendLine();
+        sb.AppendLine("SPEECH STYLE - IMPORTANT:");
+        sb.AppendLine("- Speak in a FORMAL, NOBLE manner befitting a medieval lord");
+        sb.AppendLine("- Use dignified language but keep it UNDERSTANDABLE");
+        sb.AppendLine("- You may use simple medieval words: 'Aye' (yes), 'Nay' (no), 'My lord', 'Indeed'");
+        sb.AppendLine("- Avoid modern slang, keep sentences formal and authoritative");
+        sb.AppendLine("- Example: 'I shall lead my forces to battle. The enemy will know our strength.'");
+        sb.AppendLine("- NOT like this: 'Gonna attack them, they're weak lol'");
+        sb.AppendLine();
+        sb.AppendLine("YOUR PERSONALITY:");
+        sb.AppendLine(personality.GetPersonalityDescription());
+        sb.AppendLine();
+        sb.AppendLine("YOUR TENDENCIES:");
+        sb.AppendLine(personality.GetActionTendencies());
+        sb.AppendLine();
+        sb.AppendLine("IMPORTANT RULES:");
+        sb.AppendLine("- Stay true to your personality traits");
+        sb.AppendLine("- Your decisions should reflect your values and temperament");
+        sb.AppendLine("- Consider your previous decisions for consistency");
+        sb.AppendLine("- Speak with authority and dignity");
+        
+        return sb.ToString();
+    }
+    
     private string GetPersonalityPrompt(string agentId)
     {
-        var agentLower = agentId.ToLowerInvariant();
-        var basePrompt = "";
+        // Legacy method - use basic personality without perception
+        var parts = agentId.Split('_');
+        var heroType = parts.Length > 0 ? parts[0] : "Lord";
+        var heroName = parts.Length > 1 ? parts[1] : "Unknown";
+        var clanName = parts.Length > 2 ? parts[2] : null;
         
-        if (agentLower.Contains("king") || agentLower.Contains("caladog"))
-        {
-            basePrompt = "You are King Caladog of Battania. You are a powerful, honorable warrior king. Your decisions should benefit your people and expand your kingdom.";
-        }
-        else if (agentLower.Contains("merchant") || agentLower.Contains("trader"))
-        {
-            basePrompt = "You are a wealthy merchant. Making money and expanding your trade network is your top priority.";
-        }
-        else if (agentLower.Contains("commander") || agentLower.Contains("general"))
-        {
-            basePrompt = "You are an experienced commander. A tactical genius. Your soldiers' lives matter, but victory above all.";
-        }
-        else if (agentLower.Contains("villager") || agentLower.Contains("peasant"))
-        {
-            basePrompt = "You are a peasant. Life is hard, taxes are heavy. You struggle to protect your family and survive.";
-        }
-        else
-        {
-            basePrompt = "You are a character living in the world of Mount & Blade II: Bannerlord. Make decisions using logic and reason.";
-        }
+        var isKing = heroType.Equals("King", StringComparison.OrdinalIgnoreCase) || 
+                     agentId.ToLowerInvariant().Contains("king");
+        var isFactionLeader = isKing || heroType.Equals("Leader", StringComparison.OrdinalIgnoreCase);
         
-        return basePrompt + " Consider your previous decisions. Be consistent.";
+        var personality = _personalityGenerator.GetPersonality(agentId, clanName, null, isFactionLeader, isKing);
+        
+        var sb = new StringBuilder();
+        sb.AppendLine($"You are {heroName}, a noble {heroType} in Mount & Blade II: Bannerlord.");
+        sb.AppendLine();
+        sb.AppendLine("SPEECH STYLE: Formal, noble, dignified. Use 'Aye', 'Nay', 'Indeed', 'My lord'. Avoid modern slang.");
+        sb.AppendLine();
+        sb.AppendLine("YOUR PERSONALITY:");
+        sb.AppendLine(personality.GetPersonalityDescription());
+        sb.AppendLine();
+        sb.AppendLine("YOUR TENDENCIES:");
+        sb.AppendLine(personality.GetActionTendencies());
+        
+        return sb.ToString();
     }
     
     private string BuildUserPrompt(string agentId, WorldPerception perception, string memoryContext)
@@ -223,12 +278,30 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         sb.AppendLine("MEMORY:");
         sb.AppendLine(memoryContext);
         sb.AppendLine();
-        sb.AppendLine("QUESTION: What should you do in this situation?");
+        sb.AppendLine("Based on YOUR PERSONALITY and the current situation, what should you do?");
         sb.AppendLine();
-        sb.AppendLine("Format:");
-        sb.AppendLine("THOUGHT: [Analysis]");
-        sb.AppendLine("ACTION: [Wait/MoveArmy/Trade/Attack/Defend/Recruit]");
-        sb.AppendLine("DETAIL: [Details]");
+        sb.AppendLine("AVAILABLE ACTIONS:");
+        sb.AppendLine("- Wait: Do nothing, observe");
+        sb.AppendLine("- MoveArmy: Move to a settlement or location");
+        sb.AppendLine("- Attack: Engage an enemy party");
+        sb.AppendLine("- Defend: Defend a settlement");
+        sb.AppendLine("- Retreat: Fall back to safety");
+        sb.AppendLine("- Patrol: Patrol around a settlement");
+        sb.AppendLine("- StartSiege: Begin siege of enemy settlement");
+        sb.AppendLine("- RecruitTroops: Recruit soldiers");
+        sb.AppendLine("- Trade: Conduct trade");
+        sb.AppendLine("- GiveGold: Give gold to someone");
+        sb.AppendLine("- PayRansom: Pay ransom for a prisoner");
+        sb.AppendLine("- ChangeRelation: Improve/worsen relation");
+        sb.AppendLine("- DeclareWar: Declare war on faction");
+        sb.AppendLine("- MakePeace: Make peace with faction");
+        sb.AppendLine("- ChangeKingdom: Join a different kingdom");
+        sb.AppendLine("- ProposeMarriage: Propose marriage");
+        sb.AppendLine();
+        sb.AppendLine("FORMAT YOUR RESPONSE EXACTLY AS:");
+        sb.AppendLine("THOUGHT: [Your analysis - speak formally as a lord]");
+        sb.AppendLine("ACTION: [One action from the list above]");
+        sb.AppendLine("DETAIL: [Specific details about the action]");
         
         return sb.ToString();
     }

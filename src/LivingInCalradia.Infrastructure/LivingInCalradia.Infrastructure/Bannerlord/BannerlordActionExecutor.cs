@@ -24,6 +24,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
     private readonly Dictionary<string, Func<AgentAction, string, ActionResult>> _handlers;
     private string _currentAgentId = "";
 
+    private static bool _enableActionLogs = true;
+    
     public BannerlordActionExecutor()
     {
         _handlers = new Dictionary<string, Func<AgentAction, string, ActionResult>>(StringComparer.OrdinalIgnoreCase);
@@ -43,6 +45,7 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         // Economic actions
         _handlers["GiveGold"] = HandleGiveGold;
         _handlers["Trade"] = HandleTrade;
+        _handlers["PayRansom"] = HandlePayRansom; // New: Pay ransom for prisoners
 
         // Military actions
         _handlers["MoveArmy"] = HandleMoveArmy;
@@ -57,6 +60,15 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         _handlers["Talk"] = HandleTalk;
         _handlers["Work"] = HandleWork;
         _handlers["Hide"] = HandleHide;
+        
+        // Marriage action
+        _handlers["ProposeMarriage"] = HandleProposeMarriage;
+        _handlers["Marriage"] = HandleProposeMarriage; // Alias
+        
+        // Political actions
+        _handlers["ChangeKingdom"] = HandleChangeKingdom; // New: Defect/Join kingdom
+        _handlers["BecomeVassal"] = HandleChangeKingdom; // Alias
+        _handlers["Defect"] = HandleChangeKingdom; // Alias
         
         // Test/Demo action
         _handlers["TestProof"] = HandleTestProof;
@@ -246,7 +258,10 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         action.Parameters.TryGetValue("duration", out var dur);
         var duration = Convert.ToInt32(dur ?? 60);
         
-        ShowMessage($"Waiting ({duration}s)", Colors.Gray);
+        var actingHero = FindHeroByAgentId(agentId);
+        var heroName = GetHeroDisplayName(actingHero);
+        
+        ShowMessage($"{heroName}: WAIT", Colors.Gray);
         return ActionResult.Successful($"Agent waited {duration} seconds");
     }
     
@@ -268,6 +283,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var actingHero = FindHeroByAgentId(agentId);
         var targetHero = FindHeroByName(targetName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (actingHero != null && targetHero != null && actingHero != targetHero)
         {
@@ -280,8 +297,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             // Record AFTER state for proof
             var afterRelation = CharacterRelationManager.GetHeroRelation(actingHero, targetHero);
             
-            ShowMessage($"Relation: {actingHero.Name} <-> {targetHero.Name}", Colors.Cyan);
-            ShowMessage($"  {beforeRelation} -> {afterRelation} ({amount:+0;-0})", 
+            var targetDisplayName = GetHeroDisplayName(targetHero);
+            ShowMessage($"{heroName}: RELATION with {targetDisplayName} ({beforeRelation} -> {afterRelation}, {amount:+0;-0})", 
                 amount > 0 ? Colors.Green : Colors.Red);
             
             return ActionResult.Successful($"Relation changed: {beforeRelation} -> {afterRelation}");
@@ -294,11 +311,13 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             ChangeRelationAction.ApplyRelationChangeBetweenHeroes(Hero.MainHero, targetHero, amount);
             var afterRelation = CharacterRelationManager.GetHeroRelation(Hero.MainHero, targetHero);
             
-            ShowMessage($"Player <-> {targetHero.Name}: {beforeRelation} -> {afterRelation}", Colors.Green);
+            var targetDisplayName = GetHeroDisplayName(targetHero);
+            ShowMessage($"Player: RELATION with {targetDisplayName} ({beforeRelation} -> {afterRelation})", Colors.Green);
             return ActionResult.Successful($"Relation changed: {beforeRelation} -> {afterRelation}");
         }
 
-        return ActionResult.Failed("Target hero not found");
+        ShowMessage($"{heroName}: RELATION FAILED - Target '{targetName}' not found", Colors.Red);
+        return ActionResult.Failed($"Target hero not found: {targetName}");
     }
 
     private ActionResult HandleDeclareWar(AgentAction action, string agentId)
@@ -311,6 +330,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var actingHero = FindHeroByAgentId(agentId);
         var actingKingdom = actingHero?.Clan?.Kingdom;
         var targetKingdom = FindKingdomByName(targetName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (actingKingdom != null && targetKingdom != null && actingKingdom != targetKingdom)
         {
@@ -325,20 +346,26 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 // Verify AFTER state
                 var isAtWarNow = actingKingdom.IsAtWarWith(targetKingdom);
                 
-                ShowMessage($"WAR DECLARED!", Colors.Red);
-                ShowMessage($"  {actingKingdom.Name} -> {targetKingdom.Name}", Colors.Red);
-                ShowMessage($"  Status: {(isAtWarNow ? "AT WAR" : "ERROR")}", isAtWarNow ? Colors.Red : Colors.Yellow);
+                ShowMessage($"{heroName}: WAR! {actingKingdom.Name} -> {targetKingdom.Name}", Colors.Red);
                 
-                return ActionResult.Successful($"War declared! Before: Peace, Now: {(isAtWarNow ? "War" : "Error")}");
+                return ActionResult.Successful($"{actingKingdom.Name} declared war on {targetKingdom.Name}!");
             }
             else
             {
+                ShowMessage($"{heroName}: WAR FAILED - Already at war with {targetKingdom.Name}", Colors.Yellow);
                 return ActionResult.Failed($"Already at war with {targetKingdom.Name}");
             }
         }
 
-        ShowMessage($"War declaration: {detail}", Colors.Yellow);
-        return ActionResult.Successful("War declaration intent recorded");
+        if (actingKingdom == null)
+        {
+            ShowMessage($"{heroName}: WAR FAILED - No kingdom affiliation", Colors.Yellow);
+        }
+        else
+        {
+            ShowMessage($"{heroName}: WAR FAILED - Target '{targetName}' not found", Colors.Yellow);
+        }
+        return ActionResult.Successful($"{heroName} war declaration intent recorded");
     }
 
     private ActionResult HandleMakePeace(AgentAction action, string agentId)
@@ -351,6 +378,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var actingHero = FindHeroByAgentId(agentId);
         var actingKingdom = actingHero?.Clan?.Kingdom;
         var targetKingdom = FindKingdomByName(targetName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (actingKingdom != null && targetKingdom != null)
         {
@@ -363,20 +392,26 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 
                 var isAtWarNow = actingKingdom.IsAtWarWith(targetKingdom);
                 
-                ShowMessage($"PEACE MADE!", Colors.Green);
-                ShowMessage($"  {actingKingdom.Name} <-> {targetKingdom.Name}", Colors.Green);
-                ShowMessage($"  Status: {(isAtWarNow ? "ERROR" : "PEACE")}", isAtWarNow ? Colors.Red : Colors.Green);
+                ShowMessage($"{heroName}: PEACE! {actingKingdom.Name} <-> {targetKingdom.Name}", Colors.Green);
                 
-                return ActionResult.Successful($"Peace made! Before: War, Now: {(isAtWarNow ? "Error" : "Peace")}");
+                return ActionResult.Successful($"{actingKingdom.Name} made peace with {targetKingdom.Name}!");
             }
             else
             {
+                ShowMessage($"{heroName}: PEACE FAILED - Not at war with {targetKingdom.Name}", Colors.Yellow);
                 return ActionResult.Failed($"Not at war with {targetKingdom.Name}");
             }
         }
 
-        ShowMessage($"Peace failed: {detail}", Colors.Yellow);
-        return ActionResult.Failed("Peace failed - kingdom not found");
+        if (actingKingdom == null)
+        {
+            ShowMessage($"{heroName}: PEACE FAILED - No kingdom affiliation", Colors.Yellow);
+        }
+        else
+        {
+            ShowMessage($"{heroName}: PEACE FAILED - Target '{targetName}' not found", Colors.Yellow);
+        }
+        return ActionResult.Failed($"{heroName} peace failed - kingdom not found");
     }
 
     private ActionResult HandleGiveGold(AgentAction action, string agentId)
@@ -390,6 +425,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var actingHero = FindHeroByAgentId(agentId);
         var receiverHero = FindHeroByName(receiverName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (actingHero != null && receiverHero != null)
         {
@@ -402,21 +439,21 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 GiveGoldAction.ApplyBetweenCharacters(actingHero, receiverHero, amount);
                 
                 var afterGoldGiver = actingHero.Gold;
-                var afterGoldReceiver = receiverHero.Gold;
                 
-                ShowMessage($"GOLD TRANSFER", Colors.Yellow);
-                ShowMessage($"  {actingHero.Name}: {beforeGoldGiver} -> {afterGoldGiver}", Colors.Yellow);
-                ShowMessage($"  {receiverHero.Name}: {beforeGoldReceiver} -> {afterGoldReceiver}", Colors.Yellow);
+                var receiverDisplayName = GetHeroDisplayName(receiverHero);
+                ShowMessage($"{heroName}: GIVE {amount} gold to {receiverDisplayName}", Colors.Yellow);
                 
                 return ActionResult.Successful($"Gold transferred: {amount}");
             }
             else
             {
+                ShowMessage($"{heroName}: GOLD FAILED - Insufficient ({actingHero.Gold} < {amount})", Colors.Red);
                 return ActionResult.Failed($"Insufficient gold: {actingHero.Gold} < {amount}");
             }
         }
 
-        return ActionResult.Failed("Gold transfer failed");
+        ShowMessage($"{heroName}: GOLD FAILED - Receiver '{receiverName}' not found", Colors.Red);
+        return ActionResult.Failed($"Gold transfer failed - receiver not found: {receiverName}");
     }
 
     private ActionResult HandleTrade(AgentAction action, string agentId)
@@ -425,15 +462,17 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var actingHero = FindHeroByAgentId(agentId);
         var settlement = actingHero?.CurrentSettlement;
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (settlement?.Town != null)
         {
-            ShowMessage($"TRADE: {actingHero?.Name} @ {settlement.Name}", Colors.Yellow);
-            return ActionResult.Successful($"{actingHero?.Name} traded at {settlement.Name}");
+            ShowMessage($"{heroName}: TRADE @ {settlement.Name}", Colors.Yellow);
+            return ActionResult.Successful($"{heroName} traded at {settlement.Name}");
         }
 
-        ShowMessage($"Trade: {detail}", Colors.Yellow);
-        return ActionResult.Successful("Trade simulated");
+        ShowMessage($"{heroName}: TRADE (no market available)", Colors.Yellow);
+        return ActionResult.Successful($"{heroName} trade simulated");
     }
 
     private ActionResult HandleMoveArmy(AgentAction action, string agentId)
@@ -446,25 +485,25 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
         var targetSettlement = FindSettlementByName(targetName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null && targetSettlement != null)
         {
             // REAL ACTION: Set target settlement for the party
             SetPartyTargetSettlement(party, targetSettlement);
             
-            ShowMessage($"ARMY MOVEMENT", Colors.Cyan);
-            ShowMessage($"  {party.Name} -> {targetSettlement.Name}", Colors.Cyan);
-            ShowMessage($"  Target set, movement started", Colors.Green);
-            
-            return ActionResult.Successful($"{party.Name} -> {targetSettlement.Name}");
+            ShowMessage($"{heroName}: MOVE -> {targetSettlement.Name}", Colors.Cyan);
+            return ActionResult.Successful($"{heroName} -> {targetSettlement.Name}");
         }
 
         if (targetSettlement != null)
         {
-            ShowMessage($"Target: {targetSettlement.Name}", Colors.Cyan);
-            return ActionResult.Successful($"Army directed to {targetSettlement.Name}");
+            ShowMessage($"{heroName}: Target -> {targetSettlement.Name} (no party)", Colors.Cyan);
+            return ActionResult.Successful($"{heroName} directed to {targetSettlement.Name}");
         }
 
+        ShowMessage($"{heroName}: MOVE FAILED - Location '{targetName}' not found", Colors.Red);
         return ActionResult.Failed($"Target location not found: {targetName}");
     }
 
@@ -478,6 +517,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
         var settlement = actingHero?.CurrentSettlement;
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null && settlement != null)
         {
@@ -502,14 +543,13 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
             if (recruited > 0)
             {
-                ShowMessage($"TROOPS RECRUITED", Colors.Magenta);
-                ShowMessage($"  Party: {beforeCount} -> {afterCount} (+{recruited})", Colors.Magenta);
-                return ActionResult.Successful($"Troops recruited: {beforeCount} -> {afterCount}");
+                ShowMessage($"{heroName}: RECRUIT +{recruited} @ {settlement.Name} ({beforeCount} -> {afterCount})", Colors.Magenta);
+                return ActionResult.Successful($"{heroName} recruited: {beforeCount} -> {afterCount}");
             }
         }
 
-        ShowMessage($"Recruit troops: {count} (simulated)", Colors.Magenta);
-        return ActionResult.Successful($"{count} troops recruitment simulated");
+        ShowMessage($"{heroName}: RECRUIT {count} troops (simulated)", Colors.Magenta);
+        return ActionResult.Successful($"{heroName} recruitment simulated ({count} troops)");
     }
 
     private ActionResult HandleStartSiege(AgentAction action, string agentId)
@@ -522,6 +562,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
         var targetSettlement = FindSettlementByName(targetName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null && targetSettlement != null && 
             (targetSettlement.IsTown || targetSettlement.IsCastle))
@@ -535,17 +577,17 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 // REAL ACTION: Start siege
                 SetPartyBesiegeSettlement(party, targetSettlement);
                 
-                ShowMessage($"SIEGE STARTED", Colors.Red);
-                ShowMessage($"  {party.Name} -> {targetSettlement.Name}", Colors.Red);
-                return ActionResult.Successful($"Siege of {targetSettlement.Name} started!");
+                ShowMessage($"{heroName}: SIEGE -> {targetSettlement.Name} ({settlementFaction?.Name})", Colors.Red);
+                return ActionResult.Successful($"{heroName} besieging {targetSettlement.Name}!");
             }
             else
             {
+                ShowMessage($"{heroName}: SIEGE FAILED - {targetSettlement.Name} is not hostile", Colors.Red);
                 return ActionResult.Failed($"{targetSettlement.Name} is not hostile, cannot besiege");
             }
         }
 
-        ShowMessage($"Siege target: {targetName}", Colors.Red);
+        ShowMessage($"{heroName}: SIEGE FAILED - Target '{targetName}' not found", Colors.Red);
         return ActionResult.Failed($"Could not start siege: {targetName}");
     }
 
@@ -558,6 +600,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null)
         {
@@ -568,14 +612,19 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
                 // REAL ACTION: Set to engage enemy
                 SetPartyEngageParty(party, enemyParty);
                 
-                ShowMessage($"ATTACK", Colors.Red);
-                ShowMessage($"  {party.Name} -> {enemyParty.Name}", Colors.Red);
-                return ActionResult.Successful($"{party.Name} -> {enemyParty.Name}");
+                var enemyFaction = enemyParty.MapFaction?.Name?.ToString() ?? "Unknown";
+                ShowMessage($"{heroName}: ATTACK -> {enemyParty.Name} ({enemyFaction})", Colors.Red);
+                return ActionResult.Successful($"{heroName} attacking {enemyParty.Name}");
+            }
+            else
+            {
+                ShowMessage($"{heroName}: ATTACK (no enemy found matching '{targetName}')", Colors.Yellow);
+                return ActionResult.Successful($"{heroName} attack order given");
             }
         }
 
-        ShowMessage($"Attack order given: {detail}", Colors.Red);
-        return ActionResult.Successful("Attack order given");
+        ShowMessage($"{heroName}: ATTACK (no party available)", Colors.Yellow);
+        return ActionResult.Successful($"{heroName} attack order given");
     }
 
     private ActionResult HandleRetreat(AgentAction action, string agentId)
@@ -584,6 +633,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null)
         {
@@ -593,14 +644,18 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             {
                 SetPartyTargetSettlement(party, friendlySettlement);
                 
-                ShowMessage($"RETREAT", Colors.Yellow);
-                ShowMessage($"  {party.Name} -> {friendlySettlement.Name}", Colors.Yellow);
-                return ActionResult.Successful($"{party.Name} -> {friendlySettlement.Name}");
+                ShowMessage($"{heroName}: RETREAT -> {friendlySettlement.Name}", Colors.Yellow);
+                return ActionResult.Successful($"{heroName} retreating to {friendlySettlement.Name}");
+            }
+            else
+            {
+                ShowMessage($"{heroName}: RETREAT (no friendly settlement found)", Colors.Yellow);
+                return ActionResult.Successful($"{heroName} retreat order given");
             }
         }
 
-        ShowMessage($"Retreat: {detail}", Colors.Yellow);
-        return ActionResult.Successful("Retreat order given");
+        ShowMessage($"{heroName}: RETREAT (no party available)", Colors.Yellow);
+        return ActionResult.Successful($"{heroName} retreat order given");
     }
 
     private ActionResult HandleDefend(AgentAction action, string agentId)
@@ -613,18 +668,25 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
         var settlement = FindSettlementByName(targetName) ?? actingHero?.CurrentSettlement;
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null && settlement != null)
         {
             SetPartyTargetSettlement(party, settlement);
             
-            ShowMessage($"DEFEND", Colors.Blue);
-            ShowMessage($"  {party.Name} -> {settlement.Name}", Colors.Blue);
-            return ActionResult.Successful($"{party.Name} -> {settlement.Name}");
+            ShowMessage($"{heroName}: DEFEND -> {settlement.Name}", Colors.Blue);
+            return ActionResult.Successful($"{heroName} defending {settlement.Name}");
         }
 
-        ShowMessage($"Defensive position: {detail}", Colors.Blue);
-        return ActionResult.Successful("Defensive position taken");
+        if (party != null)
+        {
+            ShowMessage($"{heroName}: DEFEND (current position)", Colors.Blue);
+            return ActionResult.Successful($"{heroName} defensive position taken");
+        }
+
+        ShowMessage($"{heroName}: DEFEND (no party available)", Colors.Blue);
+        return ActionResult.Successful($"{heroName} defensive position taken");
     }
 
     private ActionResult HandlePatrol(AgentAction action, string agentId)
@@ -637,18 +699,25 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
         var settlement = FindSettlementByName(areaName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null && settlement != null)
         {
-            SetPartyPatrolAroundSettlement(party, settlement);
+            setPartyPatrolAroundSettlement(party, settlement);
             
-            ShowMessage($"PATROL", Colors.Cyan);
-            ShowMessage($"  {party.Name} <> {settlement.Name}", Colors.Cyan);
-            return ActionResult.Successful($"{party.Name} <> {settlement.Name}");
+            ShowMessage($"{heroName}: PATROL around {settlement.Name}", Colors.Cyan);
+            return ActionResult.Successful($"{heroName} patrolling {settlement.Name}");
         }
 
-        ShowMessage($"Patrol: {detail}", Colors.Cyan);
-        return ActionResult.Successful("Patrol duty started");
+        if (party != null)
+        {
+            ShowMessage($"{heroName}: PATROL (area '{areaName}' not found)", Colors.Cyan);
+            return ActionResult.Successful($"{heroName} patrol duty started");
+        }
+
+        ShowMessage($"{heroName}: PATROL (no party available)", Colors.Cyan);
+        return ActionResult.Successful($"{heroName} patrol duty started");
     }
 
     private ActionResult HandleTalk(AgentAction action, string agentId)
@@ -659,6 +728,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         var targetName = targetHeroId?.ToString() ?? detail?.ToString() ?? "";
         var actingHero = FindHeroByAgentId(agentId);
         var targetHero = FindHeroByName(targetName);
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (actingHero != null && targetHero != null)
         {
@@ -666,12 +737,13 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             ChangeRelationAction.ApplyRelationChangeBetweenHeroes(actingHero, targetHero, 1);
             var afterRel = CharacterRelationManager.GetHeroRelation(actingHero, targetHero);
             
-            ShowMessage($"CONVERSATION: {actingHero.Name} <-> {targetHero.Name}", Colors.White);
-            ShowMessage($"  Relation: {beforeRel} -> {afterRel}", Colors.Green);
-            return ActionResult.Successful($"Conversation: {beforeRel} -> {afterRel}");
+            var targetDisplayName = GetHeroDisplayName(targetHero);
+            ShowMessage($"{heroName}: TALK with {targetDisplayName} (Relation: {beforeRel} -> {afterRel})", Colors.White);
+            return ActionResult.Successful($"Conversation with {targetDisplayName}: {beforeRel} -> {afterRel}");
         }
 
-        return ActionResult.Successful("Conversation happened");
+        ShowMessage($"{heroName}: TALK (target '{targetName}' not found)", Colors.Yellow);
+        return ActionResult.Successful($"{heroName} conversation simulated");
     }
 
     private ActionResult HandleWork(AgentAction action, string agentId)
@@ -680,6 +752,8 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var actingHero = FindHeroByAgentId(agentId);
         var settlement = actingHero?.CurrentSettlement;
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (settlement?.Village != null)
         {
@@ -687,12 +761,12 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             settlement.Village.Hearth += 0.1f;
             var afterHearth = settlement.Village.Hearth;
             
-            ShowMessage($"WORK: {settlement.Name}", Colors.Green);
-            ShowMessage($"  Hearth: {beforeHearth:F1} -> {afterHearth:F1}", Colors.Green);
-            return ActionResult.Successful($"Work: {beforeHearth:F1} -> {afterHearth:F1}");
+            ShowMessage($"{heroName}: WORK @ {settlement.Name} (Hearth: {beforeHearth:F1} -> {afterHearth:F1})", Colors.Green);
+            return ActionResult.Successful($"{heroName} work at {settlement.Name}: {beforeHearth:F1} -> {afterHearth:F1}");
         }
 
-        return ActionResult.Successful("Work completed");
+        ShowMessage($"{heroName}: WORK (no village available)", Colors.Green);
+        return ActionResult.Successful($"{heroName} work completed");
     }
 
     private ActionResult HandleHide(AgentAction action, string agentId)
@@ -701,16 +775,274 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
+        
+        var heroName = GetHeroDisplayName(actingHero);
 
         if (party != null)
         {
             SetPartyPassive(party);
             
-            ShowMessage($"HIDING: {party.Name}", Colors.Gray);
-            return ActionResult.Successful($"{party.Name} is hiding");
+            ShowMessage($"{heroName}: HIDING", Colors.Gray);
+            return ActionResult.Successful($"{heroName} is hiding");
         }
 
-        return ActionResult.Successful("Hidden");
+        ShowMessage($"{heroName}: HIDE (no party)", Colors.Gray);
+        return ActionResult.Successful($"{heroName} hidden");
+    }
+
+    private ActionResult HandleProposeMarriage(AgentAction action, string agentId)
+    {
+        action.Parameters.TryGetValue("targetHeroId", out var targetHeroId);
+        action.Parameters.TryGetValue("detail", out var detail);
+
+        var targetName = targetHeroId?.ToString() ?? detail?.ToString() ?? "";
+        var actingHero = FindHeroByAgentId(agentId);
+        var targetHero = FindHeroByName(targetName);
+
+        if (actingHero == null)
+        {
+            return ActionResult.Failed("Acting hero not found");
+        }
+
+        if (targetHero == null)
+        {
+            return ActionResult.Failed($"Target hero not found: {targetName}");
+        }
+
+        // Validate marriage conditions
+        var validationResult = ValidateMarriage(actingHero, targetHero);
+        if (!validationResult.IsValid)
+        {
+            ShowMessage($"MARRIAGE FAILED: {validationResult.Reason}", Colors.Red);
+            return ActionResult.Failed(validationResult.Reason);
+        }
+
+        try
+        {
+            // Determine groom and bride based on gender
+            var groom = actingHero.IsFemale ? targetHero : actingHero;
+            var bride = actingHero.IsFemale ? actingHero : targetHero;
+
+            // Check if either already has a spouse
+            if (groom.Spouse != null || bride.Spouse != null)
+            {
+                return ActionResult.Failed("One of the heroes is already married");
+            }
+
+            // REAL ACTION: Apply marriage
+            MarriageAction.Apply(groom, bride);
+
+            // Verify marriage was successful
+            var marriageSuccessful = groom.Spouse == bride;
+
+            if (marriageSuccessful)
+            {
+                ShowMessage($"MARRIAGE!", Colors.Magenta);
+                ShowMessage($"  {groom.Name} + {bride.Name}", Colors.Magenta);
+                ShowMessage($"  Clans united: {groom.Clan?.Name} & {bride.Clan?.Name}", Colors.Green);
+                
+                return ActionResult.Successful($"Marriage: {groom.Name} & {bride.Name}");
+            }
+            else
+            {
+                return ActionResult.Failed("Marriage action completed but verification failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.Print($"[LivingInCalradia] Marriage error: {ex}");
+            return ActionResult.Failed($"Marriage error: {ex.Message}");
+        }
+    }
+
+    private ActionResult HandleChangeKingdom(AgentAction action, string agentId)
+    {
+        action.Parameters.TryGetValue("targetKingdom", out var targetKingdomObj);
+        action.Parameters.TryGetValue("detail", out var detail);
+
+        var targetName = targetKingdomObj?.ToString() ?? detail?.ToString() ?? "";
+        var actingHero = FindHeroByAgentId(agentId);
+
+        if (actingHero == null)
+        {
+            return ActionResult.Failed("Acting hero not found");
+        }
+
+        if (actingHero.Clan == null)
+        {
+            return ActionResult.Failed("Hero has no clan");
+        }
+
+        // Only clan leaders can change kingdoms
+        if (actingHero.Clan.Leader != actingHero)
+        {
+            return ActionResult.Failed($"{actingHero.Name} is not the clan leader");
+        }
+
+        var currentKingdom = actingHero.Clan.Kingdom;
+        var targetKingdom = FindKingdomByName(targetName);
+
+        if (targetKingdom == null)
+        {
+            return ActionResult.Failed($"Target kingdom not found: {targetName}");
+        }
+
+        if (currentKingdom == targetKingdom)
+        {
+            return ActionResult.Failed($"Already in {targetKingdom.Name}");
+        }
+
+        try
+        {
+            var beforeKingdom = currentKingdom?.Name?.ToString() ?? "Independent";
+            
+            // REAL ACTION: Change kingdom (defect/join)
+            if (currentKingdom != null)
+            {
+                // Leave current kingdom first
+                ChangeKingdomAction.ApplyByLeaveKingdom(actingHero.Clan, false);
+            }
+            
+            // Join new kingdom - use correct overload
+            ChangeKingdomAction.ApplyByJoinToKingdom(actingHero.Clan, targetKingdom);
+            
+            var afterKingdom = actingHero.Clan.Kingdom?.Name?.ToString() ?? "Independent";
+            var success = actingHero.Clan.Kingdom == targetKingdom;
+
+            if (success)
+            {
+                ShowMessage($"KINGDOM CHANGED!", Colors.Magenta);
+                ShowMessage($"  {actingHero.Clan.Name}: {beforeKingdom} -> {afterKingdom}", Colors.Magenta);
+                ShowMessage($"  {actingHero.Name} is now a vassal of {targetKingdom.Name}", Colors.Green);
+                
+                return ActionResult.Successful($"Kingdom changed: {beforeKingdom} -> {afterKingdom}");
+            }
+            else
+            {
+                return ActionResult.Failed("Kingdom change failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.Print($"[LivingInCalradia] ChangeKingdom error: {ex}");
+            return ActionResult.Failed($"Kingdom change error: {ex.Message}");
+        }
+    }
+
+    private ActionResult HandlePayRansom(AgentAction action, string agentId)
+    {
+        action.Parameters.TryGetValue("targetHeroId", out var targetHeroObj);
+        action.Parameters.TryGetValue("detail", out var detail);
+
+        var targetName = targetHeroObj?.ToString() ?? detail?.ToString() ?? "";
+        var actingHero = FindHeroByAgentId(agentId);
+
+        if (actingHero == null)
+        {
+            return ActionResult.Failed("Acting hero not found");
+        }
+
+        // Find the prisoner
+        var prisoner = FindHeroByName(targetName);
+        
+        if (prisoner == null)
+        {
+            return ActionResult.Failed($"Prisoner not found: {targetName}");
+        }
+
+        if (!prisoner.IsPrisoner)
+        {
+            return ActionResult.Failed($"{prisoner.Name} is not a prisoner");
+        }
+
+        // Find captor
+        var captor = prisoner.PartyBelongedToAsPrisoner?.Owner;
+        if (captor == null)
+        {
+            return ActionResult.Failed($"Could not find captor of {prisoner.Name}");
+        }
+
+        // Calculate ransom cost (simplified)
+        var ransomCost = (int)(prisoner.Clan?.Tier ?? 1) * 5000;
+
+        if (actingHero.Gold < ransomCost)
+        {
+            return ActionResult.Failed($"Insufficient gold: {actingHero.Gold} < {ransomCost}");
+        }
+
+        try
+        {
+            var beforeGold = actingHero.Gold;
+            
+            // REAL ACTION: Pay ransom and release
+            // Transfer gold to captor
+            GiveGoldAction.ApplyBetweenCharacters(actingHero, captor, ransomCost);
+            
+            // Release prisoner
+            EndCaptivityAction.ApplyByRansom(prisoner, actingHero);
+            
+            var afterGold = actingHero.Gold;
+            var released = !prisoner.IsPrisoner;
+
+            if (released)
+            {
+                ShowMessage($"RANSOM PAID!", Colors.Yellow);
+                ShowMessage($"  {prisoner.Name} released from {captor.Name}", Colors.Green);
+                ShowMessage($"  Cost: {ransomCost:N0} gold ({beforeGold:N0} -> {afterGold:N0})", Colors.Yellow);
+                
+                // Improve relation with released hero
+                ChangeRelationAction.ApplyRelationChangeBetweenHeroes(actingHero, prisoner, 20);
+                ShowMessage($"  Relation with {prisoner.Name}: +20", Colors.Green);
+                
+                return ActionResult.Successful($"Ransom paid: {ransomCost} gold for {prisoner.Name}");
+            }
+            else
+            {
+                return ActionResult.Failed("Ransom paid but prisoner not released");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.Print($"[LivingInCalradia] PayRansom error: {ex}");
+            return ActionResult.Failed($"Ransom error: {ex.Message}");
+        }
+    }
+
+    private (bool IsValid, string Reason) ValidateMarriage(Hero hero1, Hero hero2)
+    {
+        // Same person check
+        if (hero1 == hero2)
+            return (false, "Cannot marry oneself");
+
+        // Already married check
+        if (hero1.Spouse != null)
+            return (false, $"{hero1.Name} is already married to {hero1.Spouse.Name}");
+        if (hero2.Spouse != null)
+            return (false, $"{hero2.Name} is already married to {hero2.Spouse.Name}");
+
+        // Same gender check (Bannerlord default doesn't allow)
+        if (hero1.IsFemale == hero2.IsFemale)
+            return (false, "Same-gender marriage not supported by game");
+
+        // Age check (must be adult)
+        if (hero1.Age < 18 || hero2.Age < 18)
+            return (false, "Both heroes must be adults");
+
+        // Dead check
+        if (hero1.IsDead || hero2.IsDead)
+            return (false, "Cannot marry a dead hero");
+
+        // Same clan check (no incest)
+        if (hero1.Clan == hero2.Clan && hero1.Clan != null)
+            return (false, "Cannot marry within the same clan");
+
+        // Faction war check (optional - can marry during war in some scenarios)
+        // var faction1 = hero1.Clan?.Kingdom;
+        // var faction2 = hero2.Clan?.Kingdom;
+        // if (faction1 != null && faction2 != null && faction1.IsAtWarWith(faction2))
+        //     return (false, "Cannot marry enemy faction member during war");
+
+        return (true, "");
     }
 
     #endregion
@@ -756,7 +1088,7 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         }
     }
 
-    private void SetPartyPatrolAroundSettlement(MobileParty party, Settlement settlement)
+    private void setPartyPatrolAroundSettlement(MobileParty party, Settlement settlement)
     {
         try
         {
@@ -857,8 +1189,20 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         Debug.Print($"[LivingInCalradia] ACTION: {actionType} - {message} | Params: {paramStr}");
     }
 
+    /// <summary>
+    /// Sets whether action logs should be displayed in-game.
+    /// Called from BannerlordSubModule when config changes.
+    /// </summary>
+    public static void SetLogsEnabled(bool enabled)
+    {
+        _enableActionLogs = enabled;
+    }
+    
     private static void ShowMessage(string message, Color color)
     {
+        // Only show messages if logs are enabled
+        if (!_enableActionLogs) return;
+        
         try
         {
             InformationManager.DisplayMessage(new InformationMessage($"[AI] {message}", color));
@@ -867,6 +1211,24 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         {
             // Ignore display errors
         }
+    }
+
+    /// <summary>
+    /// Gets hero name with kingdom for display in logs
+    /// </summary>
+    private string GetHeroDisplayName(Hero? hero)
+    {
+        if (hero == null) return "Unknown";
+        
+        var name = hero.Name?.ToString() ?? "Unknown";
+        var kingdom = hero.Clan?.Kingdom?.Name?.ToString();
+        
+        if (!string.IsNullOrEmpty(kingdom))
+        {
+            return $"{name} ({kingdom})";
+        }
+        
+        return name;
     }
 
     #endregion

@@ -1,18 +1,18 @@
 using System;
 using System.Threading.Tasks;
 using HarmonyLib;
-using TaleWorlds.Core;
-using TaleWorlds.Library;
-using TaleWorlds.MountAndBlade;
-using TaleWorlds.CampaignSystem;
-using TaleWorlds.Localization;
 using LivingInCalradia.AI.Configuration;
 using LivingInCalradia.AI.Orchestration;
 using LivingInCalradia.Core.Application.Interfaces;
 using LivingInCalradia.Core.Application.Services;
 using LivingInCalradia.Infrastructure.Bannerlord;
 using LivingInCalradia.Main.Features;
+using LivingInCalradia.Main.Input;
 using LivingInCalradia.Main.Localization;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.MountAndBlade;
 
 namespace LivingInCalradia.Main;
 
@@ -30,12 +30,15 @@ public class BannerlordSubModule : MBSubModuleBase
     private IAgentOrchestrator? _orchestrator;
     private BannerlordWorldSensor? _worldSensor;
     private BannerlordActionExecutor? _actionExecutor;
+    private AIConfiguration? _config;
     private bool _isInitialized;
+    private readonly object _configLock = new object(); // Thread safety for config
     
     // Tick timing control
     private float _lastTickTime;
     private float _lastKeyCheckTime;
-    private const float TickIntervalSeconds = 30f;
+    private float _tickIntervalSeconds = 60f;
+    private int _maxLordsPerTick = 1;
     private const float KeyCheckIntervalSeconds = 0.1f;
     
     /// <summary>
@@ -52,6 +55,9 @@ public class BannerlordSubModule : MBSubModuleBase
             // Initialize Harmony for patching if needed
             _harmony = new Harmony(HarmonyId);
             // _harmony.PatchAll(); // Uncomment when patches are added
+            
+            // Initialize hotkey category (will be checked during gameplay)
+            LivingInCalradiaHotKeys.Initialize();
             
             Log(LocalizedStrings.ModLoaded);
         }
@@ -92,6 +98,12 @@ public class BannerlordSubModule : MBSubModuleBase
             
             // AI Dialogue behavior
             campaignStarter.AddBehavior(new AIDialogueBehavior());
+            
+            // Event-Driven AI behavior (reacts to game events)
+            campaignStarter.AddBehavior(new AIEventBehavior());
+            
+            // World AI behavior (all lords think independently)
+            campaignStarter.AddBehavior(new WorldAIBehavior());
             
             Log(LocalizedStrings.CampaignStarting);
         }
@@ -144,7 +156,7 @@ public class BannerlordSubModule : MBSubModuleBase
         
         _lastTickTime += dt;
         
-        if (_lastTickTime >= TickIntervalSeconds)
+        if (_lastTickTime >= _tickIntervalSeconds)
         {
             _lastTickTime = 0f;
             ProcessAIAgentsAsync().ConfigureAwait(false);
@@ -234,35 +246,151 @@ public class BannerlordSubModule : MBSubModuleBase
     {
         try
         {
-            // NumPad1 = Full Proof Test
-            if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad1))
+            // Full AI Proof Test
+            if (LivingInCalradiaHotKeys.IsFullProofTestPressed())
             {
                 Log(LocalizedStrings.FullProofTestStarting);
                 BannerlordActionExecutor.RunFullAIProofTest();
             }
             
-            // NumPad2 = Single lord AI thinking
-            if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad2))
+            // Trigger Single Lord AI
+            if (LivingInCalradiaHotKeys.IsTriggerSingleLordAIPressed())
             {
                 TriggerSingleLordThinking();
             }
             
-            // NumPad3 = Quick test
-            if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad3))
+            // Quick Test
+            if (LivingInCalradiaHotKeys.IsQuickTestPressed())
             {
                 Log(LocalizedStrings.QuickTestStarting);
                 BannerlordActionExecutor.RunProofTest();
             }
             
-            // NumPad5 = Lord thoughts panel
-            if (TaleWorlds.InputSystem.Input.IsKeyPressed(TaleWorlds.InputSystem.InputKey.Numpad5))
+            // Toggle Logs
+            if (LivingInCalradiaHotKeys.IsToggleLogsPressed())
+            {
+                ToggleAILogs();
+            }
+            
+            // Show Thoughts Panel
+            if (LivingInCalradiaHotKeys.IsShowThoughtsPanelPressed())
             {
                 LordThoughtsPanel.ShowRecentThoughts();
+            }
+            
+            // Show Settings Panel (NEW)
+            if (LivingInCalradiaHotKeys.IsShowSettingsPressed())
+            {
+                UI.SettingsPanel.ShowPanel();
             }
         }
         catch
         {
         }
+    }
+    
+    /// <summary>
+    /// Toggles AI thought and action logs on/off
+    /// </summary>
+    private void ToggleAILogs()
+    {
+        lock (_configLock)
+        {
+            if (_config == null)
+            {
+                LogError("Config not loaded");
+                return;
+            }
+            
+            // Toggle both thought and action logs together
+            var newState = !_config.EnableThoughtLogs;
+            _config.EnableThoughtLogs = newState;
+            _config.EnableActionLogs = newState;
+            
+            // Update GLOBAL log state (affects all behaviors)
+            AIConfiguration.SetGlobalLogState(newState, newState, _config.EnableDebugLogs);
+            
+            // Update the action executor's log setting
+            BannerlordActionExecutor.SetLogsEnabled(newState);
+            
+            var status = newState ? "ON" : "OFF";
+            var color = newState ? Colors.Green : Colors.Yellow;
+            
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[LivingInCalradia] AI Logs: {status}",
+                color));
+            
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"  Thought logs: {status} | Action logs: {status}",
+                Colors.White));
+            
+            // Save config to file
+            SaveConfigToFile();
+        }
+    }
+    
+    /// <summary>
+    /// Saves the current config to file for persistence
+    /// </summary>
+    private void SaveConfigToFile()
+    {
+        try
+        {
+            if (_config == null) return;
+            
+            var configPath = GetConfigFilePath();
+            if (string.IsNullOrEmpty(configPath)) return;
+            
+            var json = $@"{{
+  ""Provider"": ""{_config.Provider}"",
+  ""ApiKey"": ""{_config.ApiKey}"",
+  ""ModelId"": ""{_config.ModelId}"",
+  ""Temperature"": {_config.Temperature.ToString(System.Globalization.CultureInfo.InvariantCulture)},
+  ""MaxTokens"": {_config.MaxTokens},
+
+  ""EnableThoughtLogs"": {_config.EnableThoughtLogs.ToString().ToLower()},
+  ""EnableActionLogs"": {_config.EnableActionLogs.ToString().ToLower()},
+  ""EnableDebugLogs"": {_config.EnableDebugLogs.ToString().ToLower()},
+
+  ""TickIntervalSeconds"": {_config.TickIntervalSeconds},
+  ""MaxLordsPerTick"": {_config.MaxLordsPerTick},
+
+  ""EnableEventDrivenAI"": {_config.EnableEventDrivenAI.ToString().ToLower()},
+  ""EventCooldownMinutes"": {_config.EventCooldownMinutes},
+
+  ""EnableWorldAI"": {_config.EnableWorldAI.ToString().ToLower()},
+  ""WorldTickIntervalSeconds"": {_config.WorldTickIntervalSeconds},
+  ""WorldMaxLordsPerTick"": {_config.WorldMaxLordsPerTick},
+  ""PrioritizeImportantLords"": {_config.PrioritizeImportantLords.ToString().ToLower()},
+
+  ""SkipMinorBattleEvents"": {_config.SkipMinorBattleEvents.ToString().ToLower()},
+  ""MinimumBattleSize"": {_config.MinimumBattleSize},
+
+  ""HotkeyShowSettings"": ""{_config.HotkeyShowSettings}"",
+  ""HotkeyFullProofTest"": ""{_config.HotkeyFullProofTest}"",
+  ""HotkeyTriggerAI"": ""{_config.HotkeyTriggerAI}"",
+  ""HotkeyQuickTest"": ""{_config.HotkeyQuickTest}"",
+  ""HotkeyToggleLogs"": ""{_config.HotkeyToggleLogs}"",
+  ""HotkeyShowThoughts"": ""{_config.HotkeyShowThoughts}""
+}}";
+            
+            System.IO.File.WriteAllText(configPath, json);
+            LogDebug($"Config saved to {configPath}");
+        }
+        catch (Exception ex)
+        {
+            LogDebug($"Failed to save config: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Gets the config file path
+    /// </summary>
+    private string GetConfigFilePath()
+    {
+        var assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+        var assemblyDir = System.IO.Path.GetDirectoryName(assemblyLocation) ?? "";
+        return System.IO.Path.Combine(assemblyDir, "ai-config.json");
     }
     
     /// <summary>
@@ -372,23 +500,50 @@ public class BannerlordSubModule : MBSubModuleBase
             Log(LocalizedStrings.AISystemStarting);
             
             // Load configuration
-            var config = AIConfiguration.Load();
-            config.Validate();
+            _config = AIConfiguration.Load();
+            _config.Validate();
             
-            Log($"Provider: {config.Provider}, Model: {config.ModelId}");
+            // Initialize hotkeys from config
+            LivingInCalradiaHotKeys.InitializeFromConfig(
+                _config.HotkeyFullProofTest,
+                _config.HotkeyTriggerAI,
+                _config.HotkeyQuickTest,
+                _config.HotkeyToggleLogs,
+                _config.HotkeyShowThoughts,
+                _config.HotkeyShowSettings);
+            
+            // Initialize Settings Panel with config reference for saving
+            UI.SettingsPanel.Initialize(_config, SaveConfigToFile);
+            
+            // Apply configuration settings
+            _tickIntervalSeconds = _config.TickIntervalSeconds;
+            _maxLordsPerTick = _config.MaxLordsPerTick;
+            
+            // Set GLOBAL log state from config (affects all behaviors)
+            AIConfiguration.SetGlobalLogState(
+                _config.EnableThoughtLogs, 
+                _config.EnableActionLogs, 
+                _config.EnableDebugLogs);
+            
+            // Set initial log state for action executor
+            BannerlordActionExecutor.SetLogsEnabled(_config.EnableActionLogs);
+            
+            LogDebug($"Provider: {_config.Provider}, Model: {_config.ModelId}");
+            LogDebug($"TickInterval: {_tickIntervalSeconds}s, MaxLords: {_maxLordsPerTick}");
+            LogDebug($"Logs - Thoughts: {_config.EnableThoughtLogs}, Actions: {_config.EnableActionLogs}");
             
             // Create orchestrator based on provider
-            if (config.IsGroq)
+            if (_config.IsGroq)
             {
-                _orchestrator = new GroqOrchestrator(config.ApiKey, config.ModelId, config.Temperature, "en");
-                Log("GroqOrchestrator (direct API)");
+                _orchestrator = new GroqOrchestrator(_config.ApiKey, _config.ModelId, _config.Temperature, "en");
+                LogDebug("GroqOrchestrator (direct API)");
             }
             else
             {
                 var kernelFactory = new KernelFactory()
-                    .WithOpenAI(config.ApiKey, config.ModelId, config.OrganizationId);
+                    .WithOpenAI(_config.ApiKey, _config.ModelId, _config.OrganizationId);
                 _orchestrator = kernelFactory.BuildOrchestrator();
-                Log("SemanticKernelOrchestrator");
+                LogDebug("SemanticKernelOrchestrator");
             }
             
             // Create Bannerlord-specific implementations
@@ -403,7 +558,9 @@ public class BannerlordSubModule : MBSubModuleBase
             
             _isInitialized = true;
             Log(LocalizedStrings.AISystemStarted);
-            Log("Hotkeys: NumPad1=FullTest, NumPad2=AI, NumPad3=QuickTest, NumPad5=Thoughts");
+            
+            // Show configured hotkeys in a nice format
+            UI.SettingsPanel.ShowQuickStatus();
             
             // Display in-game message
             InformationManager.DisplayMessage(new InformationMessage(
@@ -424,12 +581,12 @@ public class BannerlordSubModule : MBSubModuleBase
     /// </summary>
     private async Task ProcessAIAgentsAsync()
     {
-        if (_workflowService == null || Campaign.Current == null)
+        if (_workflowService == null || Campaign.Current == null || _config == null)
             return;
         
         if (IsGamePaused())
         {
-            Log(LocalizedStrings.GamePausedAICancelled);
+            LogDebug(LocalizedStrings.GamePausedAICancelled);
             return;
         }
         
@@ -440,13 +597,18 @@ public class BannerlordSubModule : MBSubModuleBase
                 return;
             
             var nearbyHeroes = GetNearbyHeroes(mainHero, maxDistance: 100f);
+            var processedCount = 0;
             
             foreach (var hero in nearbyHeroes)
             {
+                // Limit lords per tick
+                if (processedCount >= _maxLordsPerTick)
+                    break;
+                
                 // Check pause before each hero
                 if (IsGamePaused())
                 {
-                    Log(LocalizedStrings.GamePausedLoopStopped);
+                    LogDebug(LocalizedStrings.GamePausedLoopStopped);
                     return;
                 }
                 
@@ -455,15 +617,17 @@ public class BannerlordSubModule : MBSubModuleBase
                 
                 var agentId = GetAgentId(hero);
                 var heroInfo = GetHeroDisplayInfo(hero);
+                var heroKingdom = GetHeroKingdomDisplay(hero);
                 
-                Log(LocalizedStrings.LordThinking(heroInfo));
+                LogDebug(LocalizedStrings.LordThinking(heroInfo));
                 
                 var result = await _workflowService.ExecuteWorkflowAsync(agentId);
+                processedCount++;
                 
                 // Check again after async operation
                 if (IsGamePaused())
                 {
-                    Log(LocalizedStrings.GamePausedResultNotShown);
+                    LogDebug(LocalizedStrings.GamePausedResultNotShown);
                     return;
                 }
                 
@@ -473,33 +637,42 @@ public class BannerlordSubModule : MBSubModuleBase
                     var reasoning = result.Decision.Reasoning;
                     var shortReasoning = GetShortReasoning(reasoning);
                     
-                    if (!string.IsNullOrEmpty(shortReasoning))
+                    // Log thoughts only if enabled - format: [AI] LordName (Kingdom): thought
+                    if (_config.EnableThoughtLogs && !string.IsNullOrEmpty(shortReasoning))
                     {
-                        LogAI($"{hero.Name}: {shortReasoning}");
+                        LogAI($"{heroKingdom}: {shortReasoning}");
                     }
                     
-                    if (actions.Count > 0)
+                    // Log actions only if enabled
+                    if (_config.EnableActionLogs)
                     {
-                        foreach (var action in actions)
+                        if (actions.Count > 0)
                         {
-                            var detail = action.Parameters.ContainsKey("detail") 
-                                ? action.Parameters["detail"]?.ToString() 
-                                : "";
-                            
-                            if (!string.IsNullOrEmpty(detail))
+                            foreach (var action in actions)
                             {
-                                Log($"{heroInfo} -> {action.ActionType}: {detail}");
-                            }
-                            else
-                            {
-                                Log($"{heroInfo} -> {action.ActionType}");
+                                var detail = action.Parameters.ContainsKey("detail") 
+                                    ? action.Parameters["detail"]?.ToString() 
+                                    : "";
+                                
+                                if (!string.IsNullOrEmpty(detail))
+                                {
+                                    Log($"{heroKingdom} -> {action.ActionType}: {detail}");
+                                }
+                                else
+                                {
+                                    Log($"{heroKingdom} -> {action.ActionType}");
+                                }
                             }
                         }
+                        else
+                        {
+                            LogDebug(LocalizedStrings.LordDecidedToWait(heroInfo));
+                        }
                     }
-                    else
-                    {
-                        Log(LocalizedStrings.LordDecidedToWait(heroInfo));
-                    }
+                    
+                    // Always record to thoughts panel (for NumPad5)
+                    var actionName = actions.Count > 0 ? actions[0].ActionType : "Wait";
+                    LordThoughtsPanel.RecordThought(hero.Name.ToString(), shortReasoning, actionName);
                 }
                 else
                 {
@@ -515,28 +688,21 @@ public class BannerlordSubModule : MBSubModuleBase
         }
     }
     
-    private string GetShortReasoning(string reasoning)
+    /// <summary>
+    /// Gets hero name with kingdom for display in logs.
+    /// Format: "LordName (Kingdom)" or "LordName (Independent)"
+    /// </summary>
+    private string GetHeroKingdomDisplay(Hero hero)
     {
-        if (string.IsNullOrEmpty(reasoning))
-            return "";
+        var name = hero.Name?.ToString() ?? "Unknown";
+        var kingdom = hero.Clan?.Kingdom?.Name?.ToString();
         
-        var lines = reasoning.Split('\n');
-        foreach (var line in lines)
+        if (!string.IsNullOrEmpty(kingdom))
         {
-            var trimmed = line.Trim();
-            if (trimmed.StartsWith("THOUGHT:", StringComparison.OrdinalIgnoreCase))
-            {
-                var thought = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
-                if (thought.Length > 150)
-                    return thought.Substring(0, 147) + "...";
-                return thought;
-            }
+            return $"{name} ({kingdom})";
         }
         
-        var clean = reasoning.Replace("\n", " ").Replace("\r", "").Trim();
-        if (clean.Length > 150)
-            return clean.Substring(0, 147) + "...";
-        return clean;
+        return $"{name} (Independent)";
     }
     
     private string GetHeroDisplayInfo(Hero hero)
@@ -609,9 +775,33 @@ public class BannerlordSubModule : MBSubModuleBase
         return $"{heroType}_{hero.Name}_{faction}";
     }
     
+    private string GetShortReasoning(string reasoning)
+    {
+        if (string.IsNullOrEmpty(reasoning))
+            return "";
+        
+        var lines = reasoning.Split('\n');
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("THOUGHT:", StringComparison.OrdinalIgnoreCase))
+            {
+                var thought = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
+                if (thought.Length > 150)
+                    return thought.Substring(0, 147) + "...";
+                return thought;
+            }
+        }
+        
+        var clean = reasoning.Replace("\n", " ").Replace("\r", "").Trim();
+        if (clean.Length > 150)
+            return clean.Substring(0, 147) + "...";
+        return clean;
+    }
+    
     #region Logging Helpers
     
-    private static void Log(string message)
+    private void Log(string message)
     {
         InformationManager.DisplayMessage(new InformationMessage(
             $"{ModName} {message}",
@@ -620,7 +810,7 @@ public class BannerlordSubModule : MBSubModuleBase
         Debug.Print($"{ModName} {message}");
     }
     
-    private static void LogAI(string message)
+    private void LogAI(string message)
     {
         InformationManager.DisplayMessage(new InformationMessage(
             $"[AI] {message}",
@@ -629,7 +819,21 @@ public class BannerlordSubModule : MBSubModuleBase
         Debug.Print($"[AI] {message}");
     }
     
-    private static void LogError(string message)
+    private void LogDebug(string message)
+    {
+        // Only show debug logs if enabled in config
+        if (_config?.EnableDebugLogs == true)
+        {
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"{ModName} [DEBUG] {message}",
+                Colors.Gray));
+        }
+        
+        // Always write to debug output
+        Debug.Print($"{ModName} [DEBUG] {message}");
+    }
+    
+    private void LogError(string message)
     {
         InformationManager.DisplayMessage(new InformationMessage(
             $"{ModName} {LocalizedStrings.Error}: {message}",
