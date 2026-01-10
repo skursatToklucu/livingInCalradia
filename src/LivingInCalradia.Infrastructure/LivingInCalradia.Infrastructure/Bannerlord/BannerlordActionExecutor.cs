@@ -280,9 +280,12 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         var amount = Convert.ToInt32(amountObj ?? 5);
         var targetName = targetId?.ToString() ?? detail?.ToString() ?? "";
+        
+        // Clean up target name - remove common prefixes and extract actual name
+        targetName = CleanTargetName(targetName);
 
         var actingHero = FindHeroByAgentId(agentId);
-        var targetHero = FindHeroByName(targetName);
+        var targetHero = FindHeroByNameOrPlayer(targetName);
         
         var heroName = GetHeroDisplayName(actingHero);
 
@@ -304,6 +307,24 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
             return ActionResult.Successful($"Relation changed: {beforeRelation} -> {afterRelation}");
         }
 
+        // Fallback: If no target found, try with a nearby lord from same faction
+        if (actingHero != null && targetHero == null)
+        {
+            var nearbyLord = FindNearbyLordForRelation(actingHero);
+            if (nearbyLord != null)
+            {
+                var beforeRelation = CharacterRelationManager.GetHeroRelation(actingHero, nearbyLord);
+                ChangeRelationAction.ApplyRelationChangeBetweenHeroes(actingHero, nearbyLord, amount);
+                var afterRelation = CharacterRelationManager.GetHeroRelation(actingHero, nearbyLord);
+                
+                var targetDisplayName = GetHeroDisplayName(nearbyLord);
+                ShowMessage($"{heroName}: RELATION with {targetDisplayName} ({beforeRelation} -> {afterRelation}, {amount:+0;-0})", 
+                    amount > 0 ? Colors.Green : Colors.Red);
+                
+                return ActionResult.Successful($"Relation changed: {beforeRelation} -> {afterRelation}");
+            }
+        }
+
         // Fallback: Try with MainHero
         if (targetHero != null && Hero.MainHero != null)
         {
@@ -318,6 +339,86 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         ShowMessage($"{heroName}: RELATION FAILED - Target '{targetName}' not found", Colors.Red);
         return ActionResult.Failed($"Target hero not found: {targetName}");
+    }
+    
+    /// <summary>
+    /// Cleans up target name from AI response - extracts actual hero name
+    /// </summary>
+    private string CleanTargetName(string rawTarget)
+    {
+        if (string.IsNullOrWhiteSpace(rawTarget))
+            return "";
+        
+        var cleaned = rawTarget.Trim();
+        
+        // Remove common prefixes AI might add
+        var prefixesToRemove = new[] { 
+            "improve relations with ", "improve relation with ",
+            "befriend ", "ally with ", "talk to ",
+            "the player", "player character",
+            "lord ", "lady ", "king ", "queen ",
+            "to ", "with "
+        };
+        
+        foreach (var prefix in prefixesToRemove)
+        {
+            if (cleaned.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                cleaned = cleaned.Substring(prefix.Length).Trim();
+            }
+        }
+        
+        // If it's just a number, it's probably garbage - return empty
+        if (int.TryParse(cleaned, out _))
+        {
+            return "";
+        }
+        
+        return cleaned;
+    }
+    
+    /// <summary>
+    /// Finds hero by name, with special handling for "player" references
+    /// </summary>
+    private Hero? FindHeroByNameOrPlayer(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+        
+        // Check for player references
+        var playerKeywords = new[] { "player", "main hero", "protagonist", "you", "your character" };
+        foreach (var keyword in playerKeywords)
+        {
+            if (name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return Hero.MainHero;
+            }
+        }
+        
+        return FindHeroByName(name);
+    }
+    
+    /// <summary>
+    /// Finds a nearby lord for relation building when no specific target is given
+    /// </summary>
+    private Hero? FindNearbyLordForRelation(Hero actingHero)
+    {
+        if (Campaign.Current?.AliveHeroes == null)
+            return null;
+        
+        // First try: Find a lord from the same faction
+        var sameFactionLord = Campaign.Current.AliveHeroes
+            .FirstOrDefault(h => h != actingHero && 
+                                 h.IsLord && 
+                                 h.Clan?.Kingdom == actingHero.Clan?.Kingdom &&
+                                 h.Clan?.Kingdom != null);
+        
+        if (sameFactionLord != null)
+            return sameFactionLord;
+        
+        // Second try: Find any lord
+        return Campaign.Current.AliveHeroes
+            .FirstOrDefault(h => h != actingHero && h.IsLord && h.Clan?.Kingdom != null);
     }
 
     private ActionResult HandleDeclareWar(AgentAction action, string agentId)
@@ -481,10 +582,19 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
         action.Parameters.TryGetValue("detail", out var detail);
 
         var targetName = targetLocation?.ToString() ?? detail?.ToString() ?? "";
+        
+        // Clean up location name - extract actual settlement name from AI response
+        targetName = CleanLocationName(targetName);
 
         var actingHero = FindHeroByAgentId(agentId);
         var party = actingHero?.PartyBelongedTo;
         var targetSettlement = FindSettlementByName(targetName);
+        
+        // If no settlement found by name, try to find a logical destination
+        if (targetSettlement == null && actingHero != null)
+        {
+            targetSettlement = FindLogicalDestination(actingHero, targetName);
+        }
         
         var heroName = GetHeroDisplayName(actingHero);
 
@@ -505,6 +615,114 @@ public sealed class BannerlordActionExecutor : IGameActionExecutor
 
         ShowMessage($"{heroName}: MOVE FAILED - Location '{targetName}' not found", Colors.Red);
         return ActionResult.Failed($"Target location not found: {targetName}");
+    }
+    
+    /// <summary>
+    /// Cleans up location name from AI response - extracts actual settlement name
+    /// </summary>
+    private string CleanLocationName(string rawLocation)
+    {
+        if (string.IsNullOrWhiteSpace(rawLocation))
+            return "";
+        
+        var cleaned = rawLocation.Trim();
+        
+        // Remove common prefixes AI might add
+        var prefixesToRemove = new[] { 
+            "i shall move our army to ", "we shall proceed to ",
+            "move to ", "travel to ", "go to ", "head to ",
+            "march to ", "advance to ", "retreat to ",
+            "a strategic location near ", "the border with ",
+            "the city of ", "the town of ", "the castle of ", "the village of ",
+            "our destination is ", "we will go to ",
+            "i will move to ", "we should move to "
+        };
+        
+        foreach (var prefix in prefixesToRemove)
+        {
+            if (cleaned.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                cleaned = cleaned.Substring(prefix.Length).Trim();
+            }
+        }
+        
+        // Try to extract a proper noun (capitalized word that might be a settlement)
+        var words = cleaned.Split(new[] { ' ', ',', '.', ';', ':' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var word in words)
+        {
+            if (word.Length > 2 && char.IsUpper(word[0]))
+            {
+                // Check if this word matches any settlement
+                var settlement = FindSettlementByName(word);
+                if (settlement != null)
+                {
+                    return word;
+                }
+            }
+        }
+        
+        // If nothing found, return first meaningful word
+        if (words.Length > 0)
+        {
+            return words[0];
+        }
+        
+        return cleaned;
+    }
+    
+    /// <summary>
+    /// Finds a logical destination when AI doesn't specify a valid settlement name
+    /// </summary>
+    private Settlement? FindLogicalDestination(Hero hero, string context)
+    {
+        if (Campaign.Current?.Settlements == null)
+            return null;
+        
+        var contextLower = context.ToLowerInvariant();
+        var heroKingdom = hero.Clan?.Kingdom;
+        
+        // If context mentions "border" or enemy faction, find border settlement
+        if (contextLower.Contains("border") || contextLower.Contains("enemy") || contextLower.Contains("war"))
+        {
+            // Find a settlement near enemy territory
+            if (heroKingdom != null)
+            {
+                var enemyKingdoms = Campaign.Current.Kingdoms
+                    .Where(k => k != heroKingdom && heroKingdom.IsAtWarWith(k))
+                    .ToList();
+                
+                if (enemyKingdoms.Count > 0)
+                {
+                    // Find a friendly settlement that borders enemy territory
+                    var borderSettlement = Campaign.Current.Settlements
+                        .Where(s => s.MapFaction == heroKingdom && (s.IsTown || s.IsCastle))
+                        .FirstOrDefault();
+                    
+                    if (borderSettlement != null)
+                        return borderSettlement;
+                }
+            }
+        }
+        
+        // If context mentions "defend" or "protect", go to own settlement
+        if (contextLower.Contains("defend") || contextLower.Contains("protect") || contextLower.Contains("our"))
+        {
+            var ownSettlement = Campaign.Current.Settlements
+                .Where(s => s.MapFaction == heroKingdom && (s.IsTown || s.IsCastle))
+                .FirstOrDefault();
+            
+            if (ownSettlement != null)
+                return ownSettlement;
+        }
+        
+        // Default: Find nearest friendly town
+        var nearestTown = Campaign.Current.Settlements
+            .Where(s => s.MapFaction == heroKingdom && s.IsTown)
+            .FirstOrDefault();
+        
+        return nearestTown ?? Campaign.Current.Settlements
+            .Where(s => s.IsTown)
+            .FirstOrDefault();
     }
 
     private ActionResult HandleRecruitTroops(AgentAction action, string agentId)
