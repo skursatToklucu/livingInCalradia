@@ -25,12 +25,18 @@
     <SolutionDir>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'LivingInCalradia.sln'))</SolutionDir>
     <ProjectModulePath>$(SolutionDir)\modules\LivingInCalradia\bin\Win64_Shipping_Client</ProjectModulePath>
     <ProjectModuleDataPath>$(SolutionDir)\modules\LivingInCalradia\ModuleData</ProjectModuleDataPath>
+    <ProjectModuleGuiPath>$(SolutionDir)\modules\LivingInCalradia\GUI</ProjectModuleGuiPath>
     <GameModulePath>$(GameFolder)\Modules\LivingInCalradia\bin\Win64_Shipping_Client</GameModulePath>
     <GameModuleRoot>$(GameFolder)\Modules\LivingInCalradia</GameModuleRoot>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.2.2" />
+  </ItemGroup>
+
+  <!-- System.Windows.Forms for clipboard -->
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
   <!-- TaleWorlds References -->
@@ -71,6 +77,35 @@
       <HintPath>$(GameBinFolder)\TaleWorlds.InputSystem.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Gauntlet UI References -->
+    <Reference Include="TaleWorlds.GauntletUI">
+      <HintPath>$(GameBinFolder)\TaleWorlds.GauntletUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.GauntletUI.Data">
+      <HintPath>$(GameBinFolder)\TaleWorlds.GauntletUI.Data.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.Engine.GauntletUI">
+      <HintPath>$(GameBinFolder)\TaleWorlds.Engine.GauntletUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.ScreenSystem">
+      <HintPath>$(GameBinFolder)\TaleWorlds.ScreenSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.MountAndBlade.GauntletUI">
+      <HintPath>$(GameBinFolder)\TaleWorlds.MountAndBlade.GauntletUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.CampaignSystem.ViewModelCollection">
+      <HintPath>$(GameBinFolder)\TaleWorlds.CampaignSystem.ViewModelCollection.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TaleWorlds.Core.ViewModelCollection">
+      <HintPath>$(GameBinFolder)\TaleWorlds.Core.ViewModelCollection.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
@@ -108,6 +143,7 @@
   <Target Name="CopyToGameModules" AfterTargets="CopyToProjectModules" Condition="Exists('$(GameFolder)')">
     <MakeDir Directories="$(GameModulePath)" Condition="!Exists('$(GameModulePath)')" />
     <MakeDir Directories="$(GameModuleRoot)\ModuleData\Languages\EN" Condition="!Exists('$(GameModuleRoot)\ModuleData\Languages\EN')" />
+    <MakeDir Directories="$(GameModuleRoot)\GUI\Prefabs" Condition="!Exists('$(GameModuleRoot)\GUI\Prefabs')" />
     
     <!-- Collect all module files -->
     <ItemGroup>
@@ -115,6 +151,7 @@
       <GameSubModuleXml Include="$(SolutionDir)\modules\LivingInCalradia\SubModule.xml" />
       <GameModuleDataFiles Include="$(SolutionDir)\modules\LivingInCalradia\ModuleData\*.xml" />
       <GameLanguageFiles Include="$(SolutionDir)\modules\LivingInCalradia\ModuleData\Languages\EN\*.xml" />
+      <GameGuiFiles Include="$(SolutionDir)\modules\LivingInCalradia\GUI\Prefabs\*.xml" />
       <GameConfigFile Include="$(ProjectModulePath)\ai-config.json" Condition="Exists('$(ProjectModulePath)\ai-config.json')" />
     </ItemGroup>
     
@@ -123,6 +160,7 @@
     <Copy SourceFiles="@(GameSubModuleXml)" DestinationFolder="$(GameModuleRoot)" SkipUnchangedFiles="true" ContinueOnError="true" />
     <Copy SourceFiles="@(GameModuleDataFiles)" DestinationFolder="$(GameModuleRoot)\ModuleData" SkipUnchangedFiles="true" ContinueOnError="true" />
     <Copy SourceFiles="@(GameLanguageFiles)" DestinationFolder="$(GameModuleRoot)\ModuleData\Languages\EN" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(GameGuiFiles)" DestinationFolder="$(GameModuleRoot)\GUI\Prefabs" SkipUnchangedFiles="true" ContinueOnError="true" />
     <Copy SourceFiles="@(GameConfigFile)" DestinationFolder="$(GameModulePath)" SkipUnchangedFiles="true" ContinueOnError="true" Condition="!Exists('$(GameModulePath)\ai-config.json')" />
     
     <Message Text="[LivingInCalradia] Deployed to game: $(GameModuleRoot)" Importance="high" />

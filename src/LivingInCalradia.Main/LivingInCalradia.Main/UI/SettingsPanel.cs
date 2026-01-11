@@ -1,199 +1,202 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
-using TaleWorlds.InputSystem;
-using TaleWorlds.Localization;
 using LivingInCalradia.AI.Configuration;
 
 namespace LivingInCalradia.Main.UI;
 
-/// <summary>
-/// In-game settings panel for Living in Calradia mod.
-/// Uses simple Yes/No inquiries for configuration.
-/// ai-config.json is managed internally - NEVER exposed to users.
-/// </summary>
 public static class SettingsPanel
 {
     private static AIConfiguration? _config;
     private static Action? _onConfigChanged;
+    private static Action? _onProviderChanged;
     
-    /// <summary>
-    /// Initialize with config reference for saving changes
-    /// </summary>
-    public static void Initialize(AIConfiguration config, Action? onConfigChanged = null)
+    private static readonly string[] Providers = new []
+    {
+        "Groq", "OpenRouter", "Ollama", "OpenAI", "Anthropic", "Together", "Mistral", "DeepSeek"
+    };
+    
+    public static void Initialize(AIConfiguration config, Action? onConfigChanged = null, Action? onProviderChanged = null)
     {
         _config = config;
         _onConfigChanged = onConfigChanged;
+        _onProviderChanged = onProviderChanged;
     }
     
-    /// <summary>
-    /// Shows the main settings panel popup.
-    /// </summary>
     public static void ShowPanel()
     {
-        var bindings = Input.LivingInCalradiaHotKeys.GetKeyBindings();
+        if (_config == null) return;
         
-        // Check if hotkeys are already configured
-        var isConfigured = bindings.ContainsKey("Full Proof Test") && bindings["Full Proof Test"] != "None";
+        var logsStatus = _config.EnableThoughtLogs ? "ON" : "OFF";
+        var text = $"Provider: {_config.Provider}\n" +
+                   $"Model: {_config.ModelId}\n" +
+                   $"API Key: {GetApiKeyDisplay()}\n" +
+                   $"Logs: {logsStatus}";
         
-        // Build the content text
-        var sb = new StringBuilder();
-        sb.AppendLine("Current Hotkey Bindings:");
-        sb.AppendLine();
+        InformationManager.ShowInquiry(
+            new InquiryData(
+                titleText: "Living in Calradia",
+                text: text,
+                isAffirmativeOptionShown: true,
+                isNegativeOptionShown: true,
+                affirmativeText: "Provider",
+                negativeText: "API Key",
+                affirmativeAction: CycleProvider,
+                negativeAction: ShowApiKeyInput,
+                soundEventPath: ""
+            ),
+            pauseGameActiveState: false
+        );
+    }
+    
+    private static void CycleProvider()
+    {
+        if (_config == null) return;
         
-        foreach (var binding in bindings)
+        var currentIndex = Array.IndexOf(Providers, _config.Provider);
+        var nextIndex = (currentIndex + 1) % Providers.Length;
+        var nextProvider = Providers[nextIndex];
+        
+        _config.Provider = nextProvider;
+        _config.ModelId = AIConfiguration.Providers.GetDefaultModel(nextProvider);
+        _config.ApiBaseUrl = AIConfiguration.Providers.GetBaseUrl(nextProvider);
+        
+        if (nextProvider.Equals("Ollama", StringComparison.OrdinalIgnoreCase))
         {
-            var keyDisplay = binding.Value;
-            var status = keyDisplay == "None" ? "(disabled)" : "";
-            sb.AppendLine($"  [{keyDisplay}] {binding.Key} {status}");
+            _config.ApiKey = "ollama";
         }
         
-        sb.AppendLine();
-        sb.AppendLine("-----------------------------");
+        _onConfigChanged?.Invoke();
+        _onProviderChanged?.Invoke();
         
-        if (!isConfigured)
+        InformationManager.DisplayMessage(new InformationMessage(
+            $"[LivingInCalradia] {nextProvider} / {_config.ModelId}",
+            Colors.Green));
+        
+        ShowPanel();
+    }
+    
+    private static void ShowApiKeyInput()
+    {
+        if (_config == null) return;
+        
+        InformationManager.ShowTextInquiry(
+            new TextInquiryData(
+                titleText: "API Key",
+                text: "",
+                isAffirmativeOptionShown: true,
+                isNegativeOptionShown: true,
+                affirmativeText: "Save",
+                negativeText: "Cancel",
+                affirmativeAction: OnApiKeySaved,
+                negativeAction: null,
+                shouldInputBeObfuscated: false
+            ),
+            pauseGameActiveState: false
+        );
+    }
+    
+    private static void OnApiKeySaved(string apiKey)
+    {
+        if (_config == null) return;
+        
+        if (!string.IsNullOrWhiteSpace(apiKey))
         {
-            sb.AppendLine("Hotkeys not configured yet!");
-            sb.AppendLine("Apply default NumPad 1-5 setup?");
+            _config.ApiKey = apiKey.Trim();
+            
+            _onConfigChanged?.Invoke();
+            _onProviderChanged?.Invoke();
+            
+            InformationManager.DisplayMessage(new InformationMessage(
+                "[LivingInCalradia] API Key saved",
+                Colors.Green));
+            
+            ShowModelInput();
+        }
+    }
+    
+    private static void ShowModelInput()
+    {
+        if (_config == null) return;
+        
+        InformationManager.ShowTextInquiry(
+            new TextInquiryData(
+                titleText: "Model",
+                text: $"Current: {_config.ModelId}",
+                isAffirmativeOptionShown: true,
+                isNegativeOptionShown: true,
+                affirmativeText: "Save",
+                negativeText: "Skip",
+                affirmativeAction: OnModelSaved,
+                negativeAction: null,
+                shouldInputBeObfuscated: false
+            ),
+            pauseGameActiveState: false
+        );
+    }
+    
+    private static void OnModelSaved(string model)
+    {
+        if (_config == null) return;
+        
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            _config.ModelId = model.Trim();
+            _onConfigChanged?.Invoke();
+            _onProviderChanged?.Invoke();
+            
+            InformationManager.DisplayMessage(new InformationMessage(
+                $"[LivingInCalradia] Model: {_config.ModelId}",
+                Colors.Green));
+        }
+    }
+    
+    private static string GetApiKeyDisplay()
+    {
+        if (_config == null || string.IsNullOrEmpty(_config.ApiKey))
+            return "(not set)";
+        
+        if (_config.ApiKey.Length < 8)
+            return "(set)";
+        
+        return _config.ApiKey.Substring(0, 4) + "..." + _config.ApiKey.Substring(_config.ApiKey.Length - 4);
+    }
+    
+    public static void ShowApiKeyMissingWarning()
+    {
+        if (_config == null) return;
+        
+        InformationManager.ShowInquiry(
+            new InquiryData(
+                titleText: "Living in Calradia",
+                text: "API Key required",
+                isAffirmativeOptionShown: true,
+                isNegativeOptionShown: false,
+                affirmativeText: "Setup",
+                negativeText: "",
+                affirmativeAction: ShowApiKeyInput,
+                negativeAction: null,
+                soundEventPath: ""
+            ),
+            pauseGameActiveState: false
+        );
+    }
+    
+    public static void ShowQuickStatus()
+    {
+        if (_config == null) return;
+        
+        if (!_config.HasApiKey)
+        {
+            InformationManager.DisplayMessage(new InformationMessage(
+                "[LivingInCalradia] [Insert] Setup",
+                Colors.Yellow));
         }
         else
         {
-            sb.AppendLine("Hotkeys are configured.");
-            sb.AppendLine("Reset to default if needed.");
-        }
-        
-        // Show inquiry with quick setup option
-        InformationManager.ShowInquiry(
-            new InquiryData(
-                titleText: "Living in Calradia - Settings",
-                text: sb.ToString(),
-                isAffirmativeOptionShown: true,
-                isNegativeOptionShown: true,
-                affirmativeText: isConfigured ? "Reset to Default" : "Apply NumPad 1-5",
-                negativeText: "Close",
-                affirmativeAction: ApplyQuickSetup,
-                negativeAction: null,
-                soundEventPath: ""
-            ),
-            pauseGameActiveState: false
-        );
-        
-        Debug.Print("[LivingInCalradia] Settings panel opened");
-    }
-    
-    /// <summary>
-    /// Applies quick setup - assigns NumPad 1-5 to all functions
-    /// </summary>
-    private static void ApplyQuickSetup()
-    {
-        if (_config == null) return;
-        
-        // Assign NumPad keys (default setup)
-        _config.HotkeyFullProofTest = "NumPad1";
-        _config.HotkeyTriggerAI = "NumPad2";
-        _config.HotkeyQuickTest = "NumPad3";
-        _config.HotkeyToggleLogs = "NumPad4";
-        _config.HotkeyShowThoughts = "NumPad5";
-        // Keep Insert for settings
-        _config.HotkeyShowSettings = "Insert";
-        
-        // Reinitialize hotkeys
-        Input.LivingInCalradiaHotKeys.InitializeFromConfig(
-            _config.HotkeyFullProofTest,
-            _config.HotkeyTriggerAI,
-            _config.HotkeyQuickTest,
-            _config.HotkeyToggleLogs,
-            _config.HotkeyShowThoughts,
-            _config.HotkeyShowSettings);
-        
-        // Save to file (internal - not exposed to user)
-        _onConfigChanged?.Invoke();
-        
-        // Show success with all bindings
-        var sb = new StringBuilder();
-        sb.AppendLine("Hotkeys configured successfully!");
-        sb.AppendLine();
-        sb.AppendLine("  [NumPad1] Full AI Test");
-        sb.AppendLine("  [NumPad2] Trigger Lord AI");
-        sb.AppendLine("  [NumPad3] Quick Test");
-        sb.AppendLine("  [NumPad4] Toggle Logs");
-        sb.AppendLine("  [NumPad5] Thoughts Panel");
-        sb.AppendLine("  [Insert] Settings (this menu)");
-        sb.AppendLine();
-        sb.AppendLine("Settings saved automatically.");
-        
-        InformationManager.ShowInquiry(
-            new InquiryData(
-                titleText: "Setup Complete!",
-                text: sb.ToString(),
-                isAffirmativeOptionShown: true,
-                isNegativeOptionShown: false,
-                affirmativeText: "OK",
-                negativeText: "",
-                affirmativeAction: null,
-                negativeAction: null,
-                soundEventPath: ""
-            ),
-            pauseGameActiveState: false
-        );
-        
-        // Also show in game log
-        InformationManager.DisplayMessage(new InformationMessage(
-            "[LivingInCalradia] Hotkeys: NumPad1-5 configured!",
-            Colors.Green));
-    }
-    
-    /// <summary>
-    /// Shows a quick status of current settings on game start.
-    /// Also auto-applies default hotkeys if not configured.
-    /// </summary>
-    public static void ShowQuickStatus()
-    {
-        var bindings = Input.LivingInCalradiaHotKeys.GetKeyBindings();
-        var settingsKey = bindings.ContainsKey("Show Settings") ? bindings["Show Settings"] : "Insert";
-        
-        // Check if hotkeys are configured
-        var isConfigured = bindings.ContainsKey("Full Proof Test") && bindings["Full Proof Test"] != "None";
-        
-        if (!isConfigured && _config != null)
-        {
-            // Auto-apply default setup on first run
-            ApplyDefaultSetupSilent();
-            
             InformationManager.DisplayMessage(new InformationMessage(
-                "[LivingInCalradia] Default hotkeys applied: NumPad1-5",
+                $"[LivingInCalradia] {_config.Provider} Ready",
                 Colors.Green));
         }
-        
-        InformationManager.DisplayMessage(new InformationMessage(
-            $"[LivingInCalradia] Press [{settingsKey}] for settings",
-            Colors.Cyan));
-    }
-    
-    /// <summary>
-    /// Silently applies default hotkey setup without showing popup
-    /// </summary>
-    private static void ApplyDefaultSetupSilent()
-    {
-        if (_config == null) return;
-        
-        _config.HotkeyFullProofTest = "NumPad1";
-        _config.HotkeyTriggerAI = "NumPad2";
-        _config.HotkeyQuickTest = "NumPad3";
-        _config.HotkeyToggleLogs = "NumPad4";
-        _config.HotkeyShowThoughts = "NumPad5";
-        _config.HotkeyShowSettings = "Insert";
-        
-        Input.LivingInCalradiaHotKeys.InitializeFromConfig(
-            _config.HotkeyFullProofTest,
-            _config.HotkeyTriggerAI,
-            _config.HotkeyQuickTest,
-            _config.HotkeyToggleLogs,
-            _config.HotkeyShowThoughts,
-            _config.HotkeyShowSettings);
-        
-        _onConfigChanged?.Invoke();
     }
 }

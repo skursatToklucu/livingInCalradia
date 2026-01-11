@@ -344,6 +344,7 @@ public class BannerlordSubModule : MBSubModuleBase
             var json = $@"{{
   ""Provider"": ""{_config.Provider}"",
   ""ApiKey"": ""{_config.ApiKey}"",
+  ""ApiBaseUrl"": ""{_config.ApiBaseUrl}"",
   ""ModelId"": ""{_config.ModelId}"",
   ""Temperature"": {_config.Temperature.ToString(System.Globalization.CultureInfo.InvariantCulture)},
   ""MaxTokens"": {_config.MaxTokens},
@@ -501,7 +502,6 @@ public class BannerlordSubModule : MBSubModuleBase
             
             // Load configuration
             _config = AIConfiguration.Load();
-            _config.Validate();
             
             // Initialize hotkeys from config
             LivingInCalradiaHotKeys.InitializeFromConfig(
@@ -513,13 +513,13 @@ public class BannerlordSubModule : MBSubModuleBase
                 _config.HotkeyShowSettings);
             
             // Initialize Settings Panel with config reference for saving
-            UI.SettingsPanel.Initialize(_config, SaveConfigToFile);
+            UI.SettingsPanel.Initialize(_config, SaveConfigToFile, ReinitializeOrchestrator);
             
             // Apply configuration settings
             _tickIntervalSeconds = _config.TickIntervalSeconds;
             _maxLordsPerTick = _config.MaxLordsPerTick;
             
-            // Set GLOBAL log state from config (affects all behaviors)
+            // Set GLOBAL log state from config
             AIConfiguration.SetGlobalLogState(
                 _config.EnableThoughtLogs, 
                 _config.EnableActionLogs, 
@@ -528,23 +528,31 @@ public class BannerlordSubModule : MBSubModuleBase
             // Set initial log state for action executor
             BannerlordActionExecutor.SetLogsEnabled(_config.EnableActionLogs);
             
+            // Check if API key is configured
+            if (!_config.HasApiKey)
+            {
+                LogError("API Key not configured!");
+                Log("Press [Insert] to configure your AI provider");
+                
+                // Show warning after a short delay
+                Task.Run(async () =>
+                {
+                    await Task.Delay(2000);
+                    UI.SettingsPanel.ShowApiKeyMissingWarning();
+                });
+                
+                // Still mark as initialized so settings can be accessed
+                _isInitialized = false;
+                UI.SettingsPanel.ShowQuickStatus();
+                return;
+            }
+            
             LogDebug($"Provider: {_config.Provider}, Model: {_config.ModelId}");
             LogDebug($"TickInterval: {_tickIntervalSeconds}s, MaxLords: {_maxLordsPerTick}");
             LogDebug($"Logs - Thoughts: {_config.EnableThoughtLogs}, Actions: {_config.EnableActionLogs}");
             
             // Create orchestrator based on provider
-            if (_config.IsGroq)
-            {
-                _orchestrator = new GroqOrchestrator(_config.ApiKey, _config.ModelId, _config.Temperature, "en");
-                LogDebug("GroqOrchestrator (direct API)");
-            }
-            else
-            {
-                var kernelFactory = new KernelFactory()
-                    .WithOpenAI(_config.ApiKey, _config.ModelId, _config.OrganizationId);
-                _orchestrator = kernelFactory.BuildOrchestrator();
-                LogDebug("SemanticKernelOrchestrator");
-            }
+            CreateOrchestrator();
             
             // Create Bannerlord-specific implementations
             _worldSensor = new BannerlordWorldSensor();
@@ -573,6 +581,103 @@ public class BannerlordSubModule : MBSubModuleBase
             InformationManager.DisplayMessage(new InformationMessage(
                 $"LivingInCalradia {LocalizedStrings.Error}: {ex.Message}",
                 Colors.Red));
+        }
+    }
+    
+    /// <summary>
+    /// Creates the AI orchestrator based on configured provider
+    /// </summary>
+    private void CreateOrchestrator()
+    {
+        if (_config == null || !_config.HasApiKey) return;
+        
+        if (_config.IsOpenAICompatible)
+        {
+            // Use universal orchestrator for all OpenAI-compatible APIs
+            _orchestrator = new GroqOrchestrator(_config);
+            LogDebug($"Created orchestrator for {_config.Provider}");
+        }
+        else
+        {
+            // Fallback to Semantic Kernel for non-compatible APIs
+            var kernelFactory = new KernelFactory()
+                .WithOpenAI(_config.ApiKey, _config.ModelId, _config.OrganizationId);
+            _orchestrator = kernelFactory.BuildOrchestrator();
+            LogDebug("Created SemanticKernel orchestrator");
+        }
+    }
+    
+    /// <summary>
+    /// Reinitializes the orchestrator when provider/key changes
+    /// </summary>
+    private void ReinitializeOrchestrator()
+    {
+        if (_config == null)
+        {
+            LogError("ReinitializeOrchestrator: Config is null!");
+            return;
+        }
+        
+        try
+        {
+            Log($"Reinitializing: {_config.Provider} / {_config.ModelId}");
+            
+            if (!_config.HasApiKey)
+            {
+                _isInitialized = false;
+                _orchestrator = null;
+                _workflowService = null;
+                Log("AI disabled - no API key");
+                return;
+            }
+            
+            // Use log settings from config (don't override user preference)
+            AIConfiguration.SetGlobalLogState(_config.EnableThoughtLogs, _config.EnableActionLogs, _config.EnableDebugLogs);
+            BannerlordActionExecutor.SetLogsEnabled(_config.EnableActionLogs);
+            
+            // Ensure world sensor exists
+            if (_worldSensor == null)
+            {
+                _worldSensor = new BannerlordWorldSensor();
+            }
+            
+            // Ensure action executor exists
+            if (_actionExecutor == null)
+            {
+                _actionExecutor = new BannerlordActionExecutor();
+            }
+            
+            // Recreate orchestrator with new config
+            Log($"Creating orchestrator: {_config.Provider}");
+            _orchestrator = new GroqOrchestrator(_config);
+            
+            // Recreate workflow service
+            if (_orchestrator != null)
+            {
+                _workflowService = new AgentWorkflowService(
+                    _worldSensor,
+                    _orchestrator,
+                    _actionExecutor);
+                
+                _isInitialized = true;
+                
+                InformationManager.DisplayMessage(new InformationMessage(
+                    $"[LivingInCalradia] AI Ready: {_config.Provider}",
+                    Colors.Green));
+                
+                // Save config
+                SaveConfigToFile();
+            }
+            else
+            {
+                LogError("Orchestrator creation failed!");
+                _isInitialized = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError($"Reinitialize failed: {ex.Message}");
+            _isInitialized = false;
         }
     }
     

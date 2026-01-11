@@ -7,9 +7,108 @@ namespace LivingInCalradia.AI.Configuration;
 /// <summary>
 /// Configuration management for AI services.
 /// Loads from JSON configuration file or environment variables.
+/// Supports multiple LLM providers: Groq, OpenAI, Anthropic, Azure, Ollama, OpenRouter, etc.
 /// </summary>
 public sealed class AIConfiguration
 {
+    // ========== SUPPORTED PROVIDERS =========
+    
+    /// <summary>
+    /// Supported LLM providers and their default configurations
+    /// </summary>
+    public static class Providers
+    {
+        public const string Groq = "Groq";
+        public const string OpenAI = "OpenAI";
+        public const string Anthropic = "Anthropic";
+        public const string Azure = "Azure";
+        public const string Ollama = "Ollama";
+        public const string OpenRouter = "OpenRouter";
+        public const string Together = "Together";
+        public const string Mistral = "Mistral";
+        public const string DeepSeek = "DeepSeek";
+        
+        /// <summary>
+        /// Get API base URL for provider
+        /// </summary>
+        public static string GetBaseUrl(string provider)
+        {
+            switch (provider?.ToLowerInvariant())
+            {
+                case "groq":
+                    return "https://api.groq.com/openai/v1/";
+                case "openai":
+                    return "https://api.openai.com/v1/";
+                case "anthropic":
+                    return "https://api.anthropic.com/v1/";
+                case "azure":
+                    return ""; // Requires custom endpoint
+                case "ollama":
+                    return "http://localhost:11434/v1/";
+                case "openrouter":
+                    return "https://openrouter.ai/api/v1/";
+                case "together":
+                    return "https://api.together.xyz/v1/";
+                case "mistral":
+                    return "https://api.mistral.ai/v1/";
+                case "deepseek":
+                    return "https://api.deepseek.com/v1/";
+                default:
+                    return "https://api.groq.com/openai/v1/";
+            }
+        }
+        
+        /// <summary>
+        /// Get default model for provider
+        /// </summary>
+        public static string GetDefaultModel(string provider)
+        {
+            switch (provider?.ToLowerInvariant())
+            {
+                case "groq":
+                    return "llama-3.1-8b-instant";
+                case "openai":
+                    return "gpt-4o-mini";
+                case "anthropic":
+                    return "claude-3-haiku-20240307";
+                case "ollama":
+                    return "llama3.1";
+                case "openrouter":
+                    return "meta-llama/llama-3.1-8b-instruct:free";
+                case "together":
+                    return "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
+                case "mistral":
+                    return "mistral-small-latest";
+                case "deepseek":
+                    return "deepseek-chat";
+                default:
+                    return "llama-3.1-8b-instant";
+            }
+        }
+        
+        /// <summary>
+        /// Check if provider uses OpenAI-compatible API
+        /// </summary>
+        public static bool IsOpenAICompatible(string provider)
+        {
+            switch (provider?.ToLowerInvariant())
+            {
+                case "anthropic":
+                    return false; // Anthropic has different API format
+                default:
+                    return true; // Most providers are OpenAI-compatible
+            }
+        }
+        
+        /// <summary>
+        /// Get all supported provider names
+        /// </summary>
+        public static string[] GetAll()
+        {
+            return new[] { Groq, OpenAI, Anthropic, Azure, Ollama, OpenRouter, Together, Mistral, DeepSeek };
+        }
+    }
+    
     // ========== GLOBAL LOG STATE (Shared across all behaviors) =========
     // These static properties are used by all AI behaviors to check log state
     // Updated by BannerlordSubModule.ToggleAILogs()
@@ -59,6 +158,13 @@ public sealed class AIConfiguration
     public string ApiKey { get; set; } = string.Empty;
     public string ModelId { get; set; } = "llama-3.1-8b-instant";
     public string Provider { get; set; } = "Groq";
+    
+    /// <summary>
+    /// Custom API base URL. If empty, uses default for the provider.
+    /// Useful for Azure, self-hosted models, or proxies.
+    /// </summary>
+    public string ApiBaseUrl { get; set; } = string.Empty;
+    
     public string? OrganizationId { get; set; }
     public double Temperature { get; set; } = 0.7;
     public int MaxTokens { get; set; } = 500;
@@ -102,6 +208,21 @@ public sealed class AIConfiguration
         get => ApiKey; 
         set => ApiKey = value; 
     }
+    
+    /// <summary>
+    /// Gets the effective API base URL (custom or default for provider)
+    /// </summary>
+    public string GetEffectiveBaseUrl()
+    {
+        if (!string.IsNullOrWhiteSpace(ApiBaseUrl))
+            return ApiBaseUrl;
+        return Providers.GetBaseUrl(Provider);
+    }
+    
+    /// <summary>
+    /// Check if API key is configured
+    /// </summary>
+    public bool HasApiKey => !string.IsNullOrWhiteSpace(ApiKey);
 
     /// <summary>
     /// Loads configuration from a JSON file.
@@ -146,9 +267,9 @@ public sealed class AIConfiguration
                     // Parse JSON manually (avoid System.Text.Json issues with .NET 4.7.2)
                     var config = ParseConfigJson(json);
                     
-                    if (config != null && !string.IsNullOrWhiteSpace(config.ApiKey))
+                    if (config != null)
                     {
-                        Console.WriteLine($"[Config] Loaded successfully. Provider: {config.Provider}");
+                        Console.WriteLine($"[Config] Loaded. Provider: {config.Provider}, HasKey: {config.HasApiKey}");
                         return config;
                     }
                 }
@@ -159,9 +280,7 @@ public sealed class AIConfiguration
             }
         }
         
-        Console.WriteLine("[Config] ERROR: No config file found!");
-        
-        // Return empty config - will fail validation
+        Console.WriteLine("[Config] No config file found, using defaults");
         return new AIConfiguration();
     }
     
@@ -174,10 +293,10 @@ public sealed class AIConfiguration
         
         try
         {
-            // Simple JSON parsing
             config.ApiKey = ExtractJsonValue(json, "ApiKey") ?? "";
             config.Provider = ExtractJsonValue(json, "Provider") ?? "Groq";
-            config.ModelId = ExtractJsonValue(json, "ModelId") ?? "llama-3.1-8b-instant";
+            config.ModelId = ExtractJsonValue(json, "ModelId") ?? Providers.GetDefaultModel(config.Provider);
+            config.ApiBaseUrl = ExtractJsonValue(json, "ApiBaseUrl") ?? "";
             config.OrganizationId = ExtractJsonValue(json, "OrganizationId");
             
             var tempStr = ExtractJsonValue(json, "Temperature");
@@ -196,85 +315,59 @@ public sealed class AIConfiguration
             // Logging options
             var enableThoughtLogs = ExtractJsonValue(json, "EnableThoughtLogs");
             if (enableThoughtLogs != null)
-            {
                 config.EnableThoughtLogs = enableThoughtLogs.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
             
             var enableActionLogs = ExtractJsonValue(json, "EnableActionLogs");
             if (enableActionLogs != null)
-            {
                 config.EnableActionLogs = enableActionLogs.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
             
             var enableDebugLogs = ExtractJsonValue(json, "EnableDebugLogs");
             if (enableDebugLogs != null)
-            {
                 config.EnableDebugLogs = enableDebugLogs.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
             
             // Performance options
             var tickIntervalStr = ExtractJsonValue(json, "TickIntervalSeconds");
             if (int.TryParse(tickIntervalStr, out var tickInterval) && tickInterval > 0)
-            {
                 config.TickIntervalSeconds = tickInterval;
-            }
             
             var maxLordsStr = ExtractJsonValue(json, "MaxLordsPerTick");
             if (int.TryParse(maxLordsStr, out var maxLords) && maxLords > 0)
-            {
                 config.MaxLordsPerTick = maxLords;
-            }
             
             // Event-Driven AI options
             var enableEventDriven = ExtractJsonValue(json, "EnableEventDrivenAI");
             if (enableEventDriven != null)
-            {
                 config.EnableEventDrivenAI = enableEventDriven.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
             
             var eventCooldownStr = ExtractJsonValue(json, "EventCooldownMinutes");
             if (int.TryParse(eventCooldownStr, out var eventCooldown) && eventCooldown > 0)
-            {
                 config.EventCooldownMinutes = eventCooldown;
-            }
             
             // World AI options
             var enableWorldAI = ExtractJsonValue(json, "EnableWorldAI");
             if (enableWorldAI != null)
-            {
                 config.EnableWorldAI = enableWorldAI.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
             
             var worldTickStr = ExtractJsonValue(json, "WorldTickIntervalSeconds");
             if (int.TryParse(worldTickStr, out var worldTick) && worldTick > 0)
-            {
                 config.WorldTickIntervalSeconds = worldTick;
-            }
             
             var worldMaxLordsStr = ExtractJsonValue(json, "WorldMaxLordsPerTick");
             if (int.TryParse(worldMaxLordsStr, out var worldMaxLords) && worldMaxLords > 0)
-            {
                 config.WorldMaxLordsPerTick = worldMaxLords;
-            }
             
             var prioritizeStr = ExtractJsonValue(json, "PrioritizeImportantLords");
             if (prioritizeStr != null)
-            {
                 config.PrioritizeImportantLords = prioritizeStr.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
             
             // Event filtering options
             var skipMinorEventsStr = ExtractJsonValue(json, "SkipMinorBattleEvents");
             if (skipMinorEventsStr != null)
-            {
                 config.SkipMinorBattleEvents = skipMinorEventsStr.Equals("true", StringComparison.OrdinalIgnoreCase);
-            }
             
             var minBattleSizeStr = ExtractJsonValue(json, "MinimumBattleSize");
             if (int.TryParse(minBattleSizeStr, out var minBattleSize) && minBattleSize > 0)
-            {
                 config.MinimumBattleSize = minBattleSize;
-            }
             
             // Hotkey customization
             var hotkeyFullProof = ExtractJsonValue(json, "HotkeyFullProofTest");
@@ -363,13 +456,28 @@ public sealed class AIConfiguration
     
     /// <summary>
     /// Validates that required configuration values are present.
+    /// Returns false if API key is missing (doesn't throw).
     /// </summary>
-    public void Validate()
+    public bool TryValidate(out string errorMessage)
     {
         if (string.IsNullOrWhiteSpace(ApiKey))
         {
-            throw new InvalidOperationException(
-                "API Key is required. Set it in ai-config.json file in the mod's bin folder.");
+            errorMessage = "API Key is required. Please configure it in Settings.";
+            return false;
+        }
+        errorMessage = "";
+        return true;
+    }
+    
+    /// <summary>
+    /// Validates that required configuration values are present.
+    /// Throws if invalid.
+    /// </summary>
+    public void Validate()
+    {
+        if (!TryValidate(out var error))
+        {
+            throw new InvalidOperationException(error);
         }
     }
     
@@ -377,4 +485,9 @@ public sealed class AIConfiguration
     /// Check if using Groq provider.
     /// </summary>
     public bool IsGroq => Provider?.Equals("Groq", StringComparison.OrdinalIgnoreCase) == true;
+    
+    /// <summary>
+    /// Check if provider uses OpenAI-compatible API
+    /// </summary>
+    public bool IsOpenAICompatible => Providers.IsOpenAICompatible(Provider);
 }

@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using LivingInCalradia.AI.Configuration;
 using LivingInCalradia.AI.Memory;
 using LivingInCalradia.AI.Personality;
 using LivingInCalradia.Core.Application.Interfaces;
@@ -12,37 +13,88 @@ using LivingInCalradia.Core.Domain.ValueObjects;
 namespace LivingInCalradia.AI.Orchestration;
 
 /// <summary>
-/// Direct Groq API orchestrator with memory and personality support.
-/// Uses OpenAI-compatible REST API with dynamic personality-based prompts.
+/// Universal LLM orchestrator with memory and personality support.
+/// Supports OpenAI-compatible REST APIs: Groq, OpenAI, OpenRouter, Together, Mistral, DeepSeek, Ollama, etc.
 /// </summary>
 public sealed class GroqOrchestrator : IAgentOrchestrator
 {
     private readonly HttpClient _httpClient;
     private readonly string _model;
     private readonly double _temperature;
+    private readonly string _provider;
     private readonly AgentMemory _memory;
     private readonly PersonalityGenerator _personalityGenerator;
     
+    /// <summary>
+    /// Creates orchestrator with full configuration
+    /// </summary>
+    public GroqOrchestrator(AIConfiguration config)
+        : this(config.ApiKey, config.ModelId, config.Temperature, "en", config.Provider, config.GetEffectiveBaseUrl())
+    {
+    }
+    
+    /// <summary>
+    /// Creates orchestrator with explicit parameters
+    /// </summary>
     public GroqOrchestrator(
         string apiKey, 
         string model = "llama-3.1-8b-instant", 
         double temperature = 0.7,
-        string language = "en")
+        string language = "en",
+        string provider = "Groq",
+        string? baseUrl = null)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentNullException(nameof(apiKey));
         
         _model = model;
         _temperature = temperature;
+        _provider = provider;
         _memory = new AgentMemory(maxMemoriesPerAgent: 5);
         _personalityGenerator = new PersonalityGenerator();
         
+        // Use provided baseUrl or get default for provider
+        var effectiveBaseUrl = !string.IsNullOrWhiteSpace(baseUrl) 
+            ? baseUrl 
+            : AIConfiguration.Providers.GetBaseUrl(provider);
+        
         _httpClient = new HttpClient
         {
-            BaseAddress = new Uri("https://api.groq.com/openai/v1/"),
+            BaseAddress = new Uri(effectiveBaseUrl),
             Timeout = TimeSpan.FromSeconds(60)
         };
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+        
+        // Set authorization header based on provider
+        SetAuthorizationHeader(apiKey, provider);
+        
+        Console.WriteLine($"[Orchestrator] Initialized: Provider={provider}, Model={model}, BaseUrl={effectiveBaseUrl}");
+    }
+    
+    /// <summary>
+    /// Sets appropriate authorization header for the provider
+    /// </summary>
+    private void SetAuthorizationHeader(string apiKey, string provider)
+    {
+        switch (provider?.ToLowerInvariant())
+        {
+            case "anthropic":
+                // Anthropic uses x-api-key header
+                _httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
+                _httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+                break;
+            
+            case "openrouter":
+                // OpenRouter needs additional headers
+                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                _httpClient.DefaultRequestHeaders.Add("HTTP-Referer", "https://github.com/skursatToklucu/livingInCalradia");
+                _httpClient.DefaultRequestHeaders.Add("X-Title", "Living in Calradia");
+                break;
+            
+            default:
+                // Most providers use Bearer token
+                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                break;
+        }
     }
     
     /// <summary>
@@ -64,20 +116,17 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         var memoryContext = _memory.GetMemoryContext(agentId);
         var userPrompt = BuildUserPrompt(agentId, perception, memoryContext);
 
-        // Build JSON manually to avoid System.Text.Json issues
-        var json = BuildRequestJson(systemPrompt, userPrompt);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        string messageContent;
         
-        var response = await _httpClient.PostAsync("chat/completions", content, cancellationToken);
-        var responseJson = await response.Content.ReadAsStringAsync();
-        
-        if (!response.IsSuccessStatusCode)
+        // Use appropriate API format based on provider
+        if (_provider?.Equals("Anthropic", StringComparison.OrdinalIgnoreCase) == true)
         {
-            throw new HttpRequestException($"Groq API error: {response.StatusCode}\n{responseJson}");
+            messageContent = await CallAnthropicApiAsync(systemPrompt, userPrompt, cancellationToken);
         }
-        
-        // Parse response manually
-        var messageContent = ExtractContentFromResponse(responseJson);
+        else
+        {
+            messageContent = await CallOpenAICompatibleApiAsync(systemPrompt, userPrompt, cancellationToken);
+        }
         
         Console.WriteLine($"\n[AI RESPONSE]\n{messageContent}\n");
         
@@ -93,9 +142,103 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
         return decision;
     }
     
+    /// <summary>
+    /// Calls OpenAI-compatible API (Groq, OpenAI, OpenRouter, Together, Mistral, DeepSeek, Ollama)
+    /// </summary>
+    private async Task<string> CallOpenAICompatibleApiAsync(
+        string systemPrompt, 
+        string userPrompt, 
+        CancellationToken cancellationToken)
+    {
+        var json = BuildRequestJson(systemPrompt, userPrompt);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        
+        var response = await _httpClient.PostAsync("chat/completions", content, cancellationToken);
+        var responseJson = await response.Content.ReadAsStringAsync();
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"{_provider} API error: {response.StatusCode}\n{responseJson}");
+        }
+        
+        return ExtractContentFromResponse(responseJson);
+    }
+    
+    /// <summary>
+    /// Calls Anthropic API (different format from OpenAI)
+    /// </summary>
+    private async Task<string> CallAnthropicApiAsync(
+        string systemPrompt, 
+        string userPrompt, 
+        CancellationToken cancellationToken)
+    {
+        var escapedSystem = EscapeJson(systemPrompt);
+        var escapedUser = EscapeJson(userPrompt);
+        
+        // Anthropic uses different JSON format
+        var json = $@"{{
+            ""model"": ""{_model}"",
+            ""max_tokens"": 600,
+            ""system"": ""{escapedSystem}"",
+            ""messages"": [
+                {{""role"": ""user"", ""content"": ""{escapedUser}""}}
+            ]
+        }}";
+        
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        
+        var response = await _httpClient.PostAsync("messages", content, cancellationToken);
+        var responseJson = await response.Content.ReadAsStringAsync();
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"Anthropic API error: {response.StatusCode}\n{responseJson}");
+        }
+        
+        return ExtractAnthropicContent(responseJson);
+    }
+    
+    /// <summary>
+    /// Extract content from Anthropic response format
+    /// </summary>
+    private string ExtractAnthropicContent(string json)
+    {
+        try
+        {
+            // Anthropic format: {"content": [{"type": "text", "text": "..."}], ...}
+            var textMarker = "\"text\":";
+            var textIndex = json.IndexOf(textMarker);
+            
+            if (textIndex == -1)
+                return "No response";
+            
+            var startIndex = json.IndexOf('"', textIndex + textMarker.Length) + 1;
+            var endIndex = startIndex;
+            
+            while (endIndex < json.Length)
+            {
+                if (json[endIndex] == '"' && json[endIndex - 1] != '\\')
+                    break;
+                endIndex++;
+            }
+            
+            var content = json.Substring(startIndex, endIndex - startIndex);
+            
+            return content
+                .Replace("\\n", "\n")
+                .Replace("\\r", "\r")
+                .Replace("\\t", "\t")
+                .Replace("\\\"", "\"")
+                .Replace("\\\\", "\\");
+        }
+        catch
+        {
+            return "Parse error";
+        }
+    }
+    
     private string BuildRequestJson(string systemPrompt, string userPrompt)
     {
-        // Escape special characters for JSON
         var escapedSystem = EscapeJson(systemPrompt);
         var escapedUser = EscapeJson(userPrompt);
         
@@ -126,7 +269,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     {
         try
         {
-            // Simple parsing - find "content": "..." in response
             var contentMarker = "\"content\":";
             var contentIndex = json.LastIndexOf(contentMarker);
             
@@ -136,7 +278,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
             var startIndex = json.IndexOf('"', contentIndex + contentMarker.Length) + 1;
             var endIndex = startIndex;
             
-            // Find the closing quote, handling escaped quotes
             while (endIndex < json.Length)
             {
                 if (json[endIndex] == '"' && json[endIndex - 1] != '\\')
@@ -146,7 +287,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
             
             var content = json.Substring(startIndex, endIndex - startIndex);
             
-            // Unescape
             return content
                 .Replace("\\n", "\n")
                 .Replace("\\r", "\r")
@@ -162,7 +302,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
     
     private string ExtractShortDecision(string fullResponse)
     {
-        // Extract the THOUGHT part for memory
         var lines = fullResponse.Split('\n');
         foreach (var line in lines)
         {
@@ -172,7 +311,6 @@ public sealed class GroqOrchestrator : IAgentOrchestrator
             }
         }
         
-        // Fallback: return first 100 chars
         if (fullResponse.Length > 100)
             return fullResponse.Substring(0, 100) + "...";
         return fullResponse;
