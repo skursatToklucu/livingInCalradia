@@ -194,13 +194,13 @@ public sealed class AIConfiguration
     
     // Hotkey customization - Key names like "F1", "K", etc.
     // Set to empty string or "None" to disable
-    // Insert is always the settings key by default (F10 conflicts with game)
-    public string HotkeyShowSettings { get; set; } = "Insert";        // Settings panel (default: Insert)
-    public string HotkeyFullProofTest { get; set; } = "";             // Disabled by default
-    public string HotkeyTriggerAI { get; set; } = "";                 // Disabled by default
-    public string HotkeyQuickTest { get; set; } = "";                 // Disabled by default
-    public string HotkeyToggleLogs { get; set; } = "";                // Disabled by default
-    public string HotkeyShowThoughts { get; set; } = "";              // Disabled by default
+    // Default: NumPad keys enabled for easy testing
+    public string HotkeyShowSettings { get; set; } = "Insert";
+    public string HotkeyFullProofTest { get; set; } = "Numpad1";
+    public string HotkeyTriggerAI { get; set; } = "Numpad2";
+    public string HotkeyQuickTest { get; set; } = "Numpad3";
+    public string HotkeyToggleLogs { get; set; } = "Numpad4";
+    public string HotkeyShowThoughts { get; set; } = "Numpad5";
 
     // Backward compatibility
     public string OpenAIApiKey 
